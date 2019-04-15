@@ -161,7 +161,8 @@ if __name__ == '__main__':
     metrics_sorted = sorted(metrics, key = lambda i: i['price_to_ma'])
     ma_ratios = ""
     for metric in metrics_sorted:
-        ma_ratios += f"{metric['market']}: close: {metric['close']:0.8f} | {metric['ma_period']}-hr MA: {metric['ma']:0.8f} | price-to-MA: {metric['price_to_ma']:0.4f}\n"
+        crypto = metric['market'][:(-1 * len(base_pair))]
+        ma_ratios += f"{crypto}: close: {metric['close']:0.8f} {base_pair} | {metric['ma_period']}-hr MA: {metric['ma']:0.8f} | price-to-MA: {metric['price_to_ma']:0.4f}\n"
     print(ma_ratios)
 
     # Set up a market buy for the first result
@@ -175,7 +176,7 @@ if __name__ == '__main__':
     current_price = exchange.get_current_ask(market)
 
     quantity = buy_amount / current_price
-    print(f"{quantity:0.6f} {market} @ {current_price:0.8f}")
+    print(f"Buy: {quantity:0.6f} {crypto} @ {current_price:0.8f} {base_pair}")
 
     if live_mode:
         results = exchange.buy(market, quantity)
