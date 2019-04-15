@@ -1,0 +1,12 @@
+[API]
+BINANCE_KEY = fake
+BINANCE_SECRET = fake
+COINBASEPRO_KEY = fake
+COINBASEPRO_SECRET = fake
+
+
+[AWS]
+SNS_TOPIC = arn:aws:sns:us-east-1:123456789012:selective_dca_bot
+AWS_ACCESS_KEY_ID = fake
+AWS_SECRET_ACCESS_KEY = fake
+
