@@ -304,49 +304,12 @@ class ExchangeTokenReload(BaseModel):
 
 
 class LongPosition(BaseModel):
-    STATUS__BUY_ORDER_PLACED = 0
-    STATUS__OPEN = 1
-    STATUS__OPEN_RIDE_PROFIT = 2
-    STATUS__CLOSED_RIDE_PROFIT = 3
-    STATUS__CLOSED_LOSS = 4
-    STATUS__BUY_ORDER_CANCELED = 5
-    _status_choices = (
-        (STATUS__BUY_ORDER_PLACED, "Buy order placed"),
-        (STATUS__OPEN, "Open"),
-        (STATUS__OPEN_RIDE_PROFIT, "Secured initial profit; riding on"),
-        (STATUS__CLOSED_RIDE_PROFIT, "Rode up, backstopped gains"),
-        (STATUS__CLOSED_LOSS, "Closed at loss"),
-        (STATUS__BUY_ORDER_CANCELED, "Buy order canceled"),
-    )
-
-    STASH__FULL = 1
-    STASH__HALF = 2
-    STASH__QUARTER = 4
-    STASH__EIGHTH = 8
-    _stash_choices = (
-        (STASH__FULL, "Full-size"),
-        (STASH__HALF, "Half"),
-        (STASH__QUARTER, "Quarter"),
-        (STASH__EIGHTH, "Eighth"),
-    )
-
     market = CharField()
-    date_created = DateTimeField(default=datetime.datetime.now)
-    last_updated = TimestampField()
-    date_closed = DateTimeField(null=True)
-    status = SmallIntegerField(choices=_status_choices, default=STATUS__OPEN)
-    stash_size = SmallIntegerField(choices=_stash_choices, default=STASH__FULL)
     buy_order_id = IntegerField()
     buy_quantity = DecimalField()
     purchase_price = DecimalField()
-    sell_order_id = IntegerField(null=True)
-    sell_quantity = DecimalField(null=True)   # Could be different from buy because of dust
-    stop_loss_price = DecimalField(null=True)
-    profit = DecimalField(null=True)
     fees = DecimalField()
-    notes = TextField()
-    is_test = BooleanField(default=config.get_is_test)
-
+    timestamp = DateTimeField()
 
     def __str__(self):
         return f"{self.id}: {self.market} {time.ctime(self.date_created)}"
@@ -355,132 +318,16 @@ class LongPosition(BaseModel):
         self.last_updated = datetime.datetime.now()
         super(LongPosition, self).save(*args, **kwargs)
 
-    @property
-    def time_open(self):
-        """
-            Seconds elapsed between create and close
-        """
-        if not self.date_closed:
-            return None
-        return self.date_closed - self.date_created
-
-
-    @staticmethod
-    def get_open_positions():
-        return LongPosition.select(
-            ).where(
-                LongPosition.is_test == config.is_test,
-                LongPosition.status << [
-                    LongPosition.STATUS__BUY_ORDER_PLACED,
-                    LongPosition.STATUS__OPEN,
-                    LongPosition.STATUS__OPEN_RIDE_PROFIT
-                ]
-            )
-
-
-    @staticmethod
-    def get_open_stop_loss_positions():
-        return LongPosition.select(
-            ).where(
-                LongPosition.is_test == config.is_test,
-                LongPosition.status << [
-                    LongPosition.STATUS__OPEN,
-                    LongPosition.STATUS__OPEN_RIDE_PROFIT
-                ]
-            )
-
-
-    @staticmethod
-    def get_open_buy_orders():
-        return LongPosition.select(
-            ).where(
-                LongPosition.is_test == config.is_test,
-                LongPosition.status << [
-                    LongPosition.STATUS__BUY_ORDER_PLACED,
-                ]
-            )
-
-
-    @staticmethod
-    def num_open():
-        return LongPosition.get_open_positions().count()
-
-
-    @staticmethod
-    def get_open_positions_for_market(market):
-        return LongPosition.select(
-            ).where(
-                LongPosition.market == market,
-                LongPosition.is_test == config.is_test,
-                LongPosition.status << [
-                    LongPosition.STATUS__BUY_ORDER_PLACED,
-                    LongPosition.STATUS__OPEN,
-                    LongPosition.STATUS__OPEN_RIDE_PROFIT
-                ]
-            )
-
-
-    @staticmethod
-    def num_open_for_market(market):
-        return LongPosition.get_open_positions_for_market(market).count()
-
-
     @staticmethod
     def get_last_position(market):
         p = LongPosition.select(
             ).where(
-                LongPosition.market == market,
-                LongPosition.is_test == config.is_test
+                LongPosition.market == market
             ).limit(1)
         if p and len(p) > 0:
             return p[0]
         else:
             return None
-
-
-    @staticmethod
-    def is_losing_streak_cooldown():
-        """
-            Has enough time elapsed since the last trade in a losing streak?
-        """
-        positions = LongPosition.select(
-            ).where(
-                LongPosition.is_test == config.is_test,
-                LongPosition.date_closed != None,
-                LongPosition.profit != None
-            ).order_by(
-                -LongPosition.id
-            ).limit(config.params["losing_streak_max"])
-
-        if not positions or len(positions) < config.params["losing_streak_max"]:
-            # Not enough trades yet to have any kind of streak
-            return False
-
-        for position in positions:
-            if position.profit and position.profit > Decimal('0.0'):
-                # We had a winner. Not on a losing streak.
-                return False
-
-        # We are on a losing streak, but have we cooled off long enough
-        #   since the last sell?
-        most_recent = positions[0]  # We're in reverse sort order!
-
-        # What's our frame of reference?
-        if config.is_test:
-            # ...in a simulation it's the current historical timestamp
-            cur_timestamp = config.historical_timestamp
-        else:
-            # ...in live mode it's now()
-            cur_timestamp = time.mktime(datetime.datetime.now().timetuple())
-
-        # Has enough time elapsed to get us out of the cool-down?
-        return cur_timestamp - most_recent.date_closed < config.params["losing_streak_cooldown"] * 60  # cooldown is in minutes
-
-
-    @staticmethod
-    def get_24hr_results():
-        return LongPosition.get_results(since=timedelta(days=1))
-
 
     @staticmethod
     def get_results(since=timedelta(days=1)):
@@ -518,11 +365,6 @@ class LongPosition(BaseModel):
             ).where(
                 LongPosition.date_closed >= d
             )
-
-
-    @staticmethod
-    def clear_test_positions():
-        LongPosition.delete().where(LongPosition.is_test == True).execute()  # noqa: E712,E501; query fails with 'is'
 
 
     @staticmethod

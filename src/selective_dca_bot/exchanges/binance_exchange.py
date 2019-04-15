@@ -174,7 +174,8 @@ class BinanceExchange(AbstractExchange):
         print(f"num {market} candles: {limit}")
 
         # Give the exchange a breather so we don't get API limited
-        time.sleep(5)
+        if limit > 10:
+            time.sleep(5)
 
         raw_data = self.client.get_klines(symbol=market, interval=self._intervals[interval], limit=limit)
 
@@ -242,7 +243,7 @@ class BinanceExchange(AbstractExchange):
             }
 
 
-    def buy(self, market, quantity, price=None):
+    def buy(self, market, quantity):
         """
             Place a market buy order. As soon as it completes submit a stop-loss
             limit order.
@@ -251,23 +252,65 @@ class BinanceExchange(AbstractExchange):
         #   be divided down to so many digits of precision, depending on the
         #   particular market.
         market_params = MarketParams.get_market(market)
+        quantized_qty = quantity.quantize(market_params.lot_step_size)
 
-        exp = market_params.lot_step_size
-        if market_params.lot_step_size < Decimal('1.0'):
-            exp = Decimal(10.0) ** Decimal(market_params.lot_step_size.as_tuple().exponent + 1)
-        quantized_qty = quantity.quantize(exp, rounding=decimal.ROUND_DOWN)
+        """ {
+                'symbol': 'BNBBTC',
+                'orderId': 58158667,
+                'clientOrderId': 'jFTEtmTTUTqspMi6Oq08R9',
+                'transactTime': 1529546953007,
+                'price': '0.00000000',
+                'origQty': '1.55000000',
+                'executedQty': '1.55000000',
+                'status': 'FILLED',
+                'timeInForce': 'GTC',
+                'type': 'MARKET',
+                'side': 'BUY'
+            }
+        """
+        try:
+            buy_order_response = self.client.order_market_buy(
+                symbol=market,
+                quantity=quantized_qty,
+                newOrderRespType=Client.ORDER_RESP_TYPE_FULL    # Need the full details to get 'commission' (aka fees).
+            )
+        except Exception as e:
+            print(f"-------------- MARKET BUY EXCEPTION!! --------------" +
+                  f" | {market}" +
+                  f" | quantized_qty: {quantized_qty}"
+                )
 
-        if price:
-            price = price.quantize(market_params.price_tick_size, rounding=decimal.ROUND_DOWN)
+            # Throw it back up to bomb us out
+            raise e
 
-        if config.is_test:
-            # Pretend the market order went through just fine
-            order_id = 1
-            purchase_price = self.get_current_price(market)
-            total_qty = quantized_qty
-            total_commission = purchase_price * total_qty * Decimal('0.0005') / self.get_current_price(f"{self.exchange_token}BTC")
-            total_commission = total_commission.quantize(Decimal('0.00000001'), rounding=decimal.ROUND_DOWN)
-            timestamp = config.historical_timestamp
+        if config.verbose:
+            print(f"BUY ORDER: {buy_order_response}")
+
+        order_id = buy_order_response["orderId"]
+        timestamp = buy_order_response["transactTime"] / 1000
+
+        if buy_order_response["status"] != 'FILLED':
+            # TODO: handle unfilled market buys
+            raise Exception(f"Buy order not FILLED (yet?)\n{buy_order_response}")
+
+        elif buy_order_response["status"] == 'FILLED':
+            # Calculate an aggregate purchase price
+            total_spent = Decimal(0.0)
+            total_qty = Decimal(0.0)
+            total_commission = Decimal(0.0)
+            for fill in buy_order_response["fills"]:
+                """ {
+                        "price": "4000.00000000",
+                        "qty": "1.00000000",
+                        "commission": "4.00000000",
+                        "commissionAsset": "USDT"
+                    }
+                """
+                total_spent += Decimal(fill["price"]) * Decimal(fill["qty"])
+                total_qty += Decimal(fill["qty"])
+                total_commission += Decimal(fill["commission"])
+
+            purchase_price = total_spent / total_qty
 
             return {
                 "order_id": order_id,
@@ -276,107 +319,6 @@ class BinanceExchange(AbstractExchange):
                 "fees": total_commission,
                 "timestamp": timestamp
             }
-        else:
-            """ {
-                    'symbol': 'BNBBTC',
-                    'orderId': 58158667,
-                    'clientOrderId': 'jFTEtmTTUTqspMi6Oq08R9',
-                    'transactTime': 1529546953007,
-                    'price': '0.00000000',
-                    'origQty': '1.55000000',
-                    'executedQty': '1.55000000',
-                    'status': 'FILLED',
-                    'timeInForce': 'GTC',
-                    'type': 'MARKET',
-                    'side': 'BUY'
-                }
-            """
-            if price:
-                try:
-                    buy_order_response = self.client.order_limit_buy(
-                        symbol=market,
-                        quantity=quantized_qty,
-                        price=price,
-                        newOrderRespType=Client.ORDER_RESP_TYPE_FULL    # Need the full details to get 'commission' (aka fees).
-                    )
-                except Exception as e:
-                    print(f"-------------- LIMIT BUY EXCEPTION!! --------------" +
-                          f" | {market}" +
-                          f" | quantity: {quantity}" +
-                          f" | quantized_qty: {quantized_qty}"
-                          f" | price: {price}"
-                        )
-
-                    # Throw it back up to bomb us out
-                    raise e
-            else:
-                try:
-                    buy_order_response = self.client.order_market_buy(
-                        symbol=market,
-                        quantity=quantized_qty,
-                        newOrderRespType=Client.ORDER_RESP_TYPE_FULL    # Need the full details to get 'commission' (aka fees).
-                    )
-                except Exception as e:
-                    print(f"-------------- MARKET BUY EXCEPTION!! --------------" +
-                          f" | {market}" +
-                          f" | quantity: {quantity}" +
-                          f" | quantized_qty: {quantized_qty}"
-                        )
-
-                    # Throw it back up to bomb us out
-                    raise e
-
-            if config.verbose:
-                print(f"BUY ORDER: {buy_order_response}")
-
-            order_id = buy_order_response["orderId"]
-            timestamp = buy_order_response["transactTime"] / 1000
-
-            if not price and buy_order_response["status"] != 'FILLED':
-                # TODO: handle unfilled market buys
-                raise Exception(f"Buy order not FILLED (yet?)\n{buy_order_response}")
-
-            elif not price and buy_order_response["status"] == 'FILLED':
-                # Calculate an aggregate purchase price
-                total_spent = Decimal(0.0)
-                total_qty = Decimal(0.0)
-                total_commission = Decimal(0.0)
-                for fill in buy_order_response["fills"]:
-                    """ {
-                            "price": "4000.00000000",
-                            "qty": "1.00000000",
-                            "commission": "4.00000000",
-                            "commissionAsset": "USDT"
-                        }
-                    """
-                    total_spent += Decimal(fill["price"]) * Decimal(fill["qty"])
-                    total_qty += Decimal(fill["qty"])
-                    total_commission += Decimal(fill["commission"])
-
-                purchase_price = total_spent / total_qty
-
-                return {
-                    "order_id": order_id,
-                    "price": purchase_price,
-                    "quantity": total_qty,
-                    "fees": total_commission,
-                    "timestamp": timestamp
-                }
-
-            elif price:
-                print(f"LIMIT BUY:" +
-                      f" | market: {market}" +
-                      f" | quantity: {quantized_qty}" +
-                      f" | price: {price}" +
-                      f"\n{buy_order_response}")
-
-                return {
-                    "order_id": order_id,
-                    "price": price,
-                    "quantity": quantized_qty,
-                    "fees": Decimal('0.0'),
-                    "timestamp": timestamp
-                }
 
 
     def reload_exchange_token(self, quantity):
@@ -725,14 +667,11 @@ class BinanceExchange(AbstractExchange):
 
 
     def get_current_price(self, market):
-        if config.is_test:
-            # Get the closing price of the current historical_timestamp. Assume we're asking
-            #   near the beginning of the 'current' 1-min candle
-            candle = Candle.get_historical_candle(market, Candle.INTERVAL__1MINUTE, config.historical_timestamp)
-            return candle.open * Decimal('0.90') + candle.close * Decimal('0.10')
+        return Decimal(self.client.get_ticker(symbol=market)["lastPrice"])
 
-        else:
-            return Decimal(self.client.get_ticker(symbol=market)["lastPrice"])
+
+    def get_current_ask(self, market):
+        return Decimal(self.client.get_order_book(symbol=market).get('asks')[0][0])
 
 
     def get_market_depth(self, market):

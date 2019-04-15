@@ -5,9 +5,9 @@ class ExchangesManager():
     
     @staticmethod
     def get_exchanges(exchanges):
-        ex = []
+        ex = {}
         for exchange in exchanges:
             if exchange['name'] == 'binance':
-                ex.append(BinanceExchange(exchange['key'], exchange['secret'], exchange['watchlist']))
+                ex['binance'] = BinanceExchange(exchange['key'], exchange['secret'], exchange['watchlist'])
 
         return ex

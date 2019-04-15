@@ -9,7 +9,7 @@ from datetime import timedelta
 
 from selective_dca_bot import config
 from selective_dca_bot.exchanges import BinanceExchange, ExchangesManager
-from selective_dca_bot.models import Candle
+from selective_dca_bot.models import Candle, LongPosition
 
 
 parser = argparse.ArgumentParser(description='Selective DCA (Dollar Cost Averaging) Bot')
@@ -22,11 +22,11 @@ parser.add_argument('base_pair',
                         'ETH', 'USD', etc)""")
 
 # Optional switches
-parser.add_argument('-n', '--num_buys',
-                    default=1,
-                    dest="num_buys",
-                    type=int,
-                    help="Divide up the 'amount' across 'n' selective buys")
+# parser.add_argument('-n', '--num_buys',
+#                     default=1,
+#                     dest="num_buys",
+#                     type=int,
+#                     help="Divide up the 'amount' across 'n' selective buys")
 
 parser.add_argument('-e', '--exchanges',
                     default='binance',
@@ -75,7 +75,7 @@ if __name__ == '__main__':
     config.is_test = not live_mode
     daily_report = args.daily_report
     weekly_report = args.weekly_report
-    num_buys = args.num_buys
+    # num_buys = args.num_buys
     exchange_list = args.exchanges.split(',')
 
     # Read settings
@@ -131,10 +131,8 @@ if __name__ == '__main__':
     watchlist.extend(binance_watchlist)
 
     params = {
-        "num_buys": num_buys,
+        # "num_buys": num_buys,
     }
-
-    test_period = 9  # days
 
     # Setup package-wide settings
     config.params = params
@@ -151,18 +149,53 @@ if __name__ == '__main__':
             }
         )
 
-    ma_periods = [200, 100]
+    # If multiple MA periods are passed, will calculate the price-to-MA with the lowest MA
+    ma_periods = [200]
 
     # Retrieve exchanges, initialize each crypto on its watchlist, and update latest candles
     exchanges = ExchangesManager.get_exchanges(exchanges_data)
     metrics = []
-    for exchange in exchanges:
+    for name, exchange in exchanges.items():
         metrics.extend(exchange.calculate_latest_metrics(base_pair=base_pair, ma_periods=ma_periods))
 
+    metrics_sorted = sorted(metrics, key = lambda i: i['price_to_ma'])
+    ma_ratios = ""
+    for metric in metrics_sorted:
+        ma_ratios += f"{metric['market']}: close: {metric['close']:0.8f} | {metric['ma_period']}-hr MA: {metric['ma']:0.8f} | price-to-MA: {metric['price_to_ma']:0.4f}\n"
+    print(ma_ratios)
 
-    for metric in sorted(metrics, key = lambda i: i['price_to_ma']):
-        print(f"{metric['market']}: close: {metric['close']:0.8f} | {metric['ma_period']}-hr MA: {metric['ma']:0.8f} | price-to-MA: {metric['price_to_ma']:0.4f}")
+    # Set up a market buy for the first result
+    metric = metrics_sorted[0]
+    market = metric['market']
+    crypto = market[:(-1 * len(base_pair))]
+    exchange_name = metric['exchange']
+    exchange = exchanges[exchange_name]
+    price_to_ma = metric['price_to_ma']
 
+    current_price = exchange.get_current_ask(market)
 
+    quantity = buy_amount / current_price
+    print(f"{quantity:0.6f} {market} @ {current_price:0.8f}")
 
+    if live_mode:
+        results = exchange.buy(market, quantity)
+
+        LongPosition.create(
+            market=market,
+            buy_order_id=results['order_id'],
+            buy_quantity=results['quantity'],
+            purchase_price=results['price'],
+            fees=results['fees'],
+            timestamp=results['timestamp'],
+        )
+
+        # Send SNS message
+        subject = f"Bought {results['quantity'].normalize()} {crypto} (price-to-MA: {price_to_ma*Decimal('100.0'):0.2f}%)"
+        print(subject)
+        message = ma_ratios
+        sns.publish(
+            TopicArn=sns_topic,
+            Subject=subject,
+            Message=message
+        )
 
