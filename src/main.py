@@ -171,6 +171,7 @@ if __name__ == '__main__':
     crypto = market[:(-1 * len(base_pair))]
     exchange_name = metric['exchange']
     exchange = exchanges[exchange_name]
+    ma_period = metric['ma_period']
     price_to_ma = metric['price_to_ma']
 
     current_price = exchange.get_current_ask(market)
@@ -191,7 +192,7 @@ if __name__ == '__main__':
         )
 
         # Send SNS message
-        subject = f"Bought {results['quantity'].normalize()} {crypto} (price-to-MA: {price_to_ma*Decimal('100.0'):0.2f}%)"
+        subject = f"Bought {results['quantity'].normalize()} {crypto} ({price_to_ma*Decimal('100.0'):0.2f}% of {ma_period}-hr MA)"
         print(subject)
         message = ma_ratios
         sns.publish(
