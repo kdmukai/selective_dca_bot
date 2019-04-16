@@ -1,4 +1,5 @@
 # SelectiveDCA Bot
+A Dollar Cost Averaging (DCA) bot that does regular buys but opportunistically selects _which_ crypto to buy by comparing market conditions for all the assets in its user-set watchlist.
 
 ![LRC chart](imgs/lrc_chart.png)
 _DCA = Buy every X hours; SelectiveDCA = Buy the crypto furthest below its 200-hr MA every X hours_
