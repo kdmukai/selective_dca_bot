@@ -8,7 +8,7 @@ _DCA = Buy every X hours; SelectiveDCA = Buy the crypto furthest below its 200-h
 ## Overview
 The Dollar Cost Averaging investment philosophy is the easiest "set it and forget it" approach there is and is quite FOMO-resistant. DCA requires a longer-term commitment; it doesn't matter if the market happens to be up or down today, DCA will keep buying in regardless.
 
-While I love the simplicity of DCA, you do end up buying into inopportune random spikes like LRC's _here today, gone tomorrow_ pump in the image above. In the long run the "Averaging" part of DCA will smooth the spikes and valleys out, but I was curious to see if there might be room for some slight improvements by employing a tiny bit more intelligence to the buying process. In short: don't buy into a spike. SelectiveDCA will still buy in on a regular schedule, but it has the flexibility to spend its money on what it thinks is the best opportunity at the moment.
+While I love the simplicity of DCA, you do end up buying into inopportune random spikes like LRC's "here today, gone tomorrow" pump in the image above. In the long run the "Averaging" part of DCA will smooth the spikes and valleys out, but I was curious to see if there might be room for some slight improvements by employing a tiny bit more intelligence to the buying process. In short: don't buy into a spike. SelectiveDCA will still buy in on a regular schedule, but it has the flexibility to spend its money on what it thinks is the best opportunity at the moment.
 
 _Big caveat: if the opportunity metric used isn't great, SelectiveDCA will, of course, make bad decisions._
 
