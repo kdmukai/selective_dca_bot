@@ -5,6 +5,10 @@ COINBASEPRO_KEY = fake
 COINBASEPRO_SECRET = fake
 
 
+[CONFIG]
+MAX_CRYPTO_HOLDINGS_PERCENTAGE = 0.333
+
+
 [AWS]
 SNS_TOPIC = arn:aws:sns:us-east-1:123456789012:selective_dca_bot
 AWS_ACCESS_KEY_ID = fake

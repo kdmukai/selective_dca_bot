@@ -204,6 +204,7 @@ class Candle(BaseModel):
         return ma / Decimal(periods)
 
 
+
 class Balance(BaseModel):
     date_created = TimestampField(default=datetime.datetime.now)
     asset = CharField(default='BTC')
@@ -310,6 +311,7 @@ class LongPosition(BaseModel):
     purchase_price = DecimalField()
     fees = DecimalField()
     timestamp = DateTimeField()
+    watchlist = CharField()
 
     def __str__(self):
         return f"{self.id}: {self.market} {time.ctime(self.date_created)}"
@@ -328,6 +330,13 @@ class LongPosition(BaseModel):
             return p[0]
         else:
             return None
+
+    @staticmethod
+    def get_num_positions(market=None):
+        if market:
+            return LongPosition.select().where(LongPosition.market == market).count()
+        else:
+            return LongPosition.select().count()
 
     @staticmethod
     def get_results(since=timedelta(days=1)):

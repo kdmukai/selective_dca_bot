@@ -85,6 +85,8 @@ if __name__ == '__main__':
     binance_key = arg_config.get('API', 'BINANCE_KEY')
     binance_secret = arg_config.get('API', 'BINANCE_SECRET')
 
+    max_crypto_holdings_percentage = Decimal(arg_config.get('CONFIG', 'MAX_CRYPTO_HOLDINGS_PERCENTAGE'))
+
     try:
         sns_topic = arg_config.get('AWS', 'SNS_TOPIC')
         aws_access_key_id = arg_config.get('AWS', 'AWS_ACCESS_KEY_ID')
@@ -138,6 +140,16 @@ if __name__ == '__main__':
     config.params = params
     config.interval = Candle.INTERVAL__1HOUR
 
+    # Are we too heavily weighted on a crypto on our watchlist?
+    over_positioned = []
+    num_positions = {}
+    total_positions = LongPosition.get_num_positions()
+    for crypto in watchlist:
+        market = f"{crypto}{base_pair}"
+        num_positions[crypto] = LongPosition.get_num_positions(market)
+        if Decimal(num_positions[crypto] / total_positions) >= max_crypto_holdings_percentage:
+            over_positioned.append(crypto)
+
     exchanges_data = []
     if 'binance' in exchange_list:
         exchanges_data.append(
@@ -160,19 +172,23 @@ if __name__ == '__main__':
 
     metrics_sorted = sorted(metrics, key = lambda i: i['price_to_ma'])
     ma_ratios = ""
+    target_metric = None
     for metric in metrics_sorted:
         crypto = metric['market'][:(-1 * len(base_pair))]
-        ma_ratios += f"{crypto}: close: {metric['close']:0.8f} {base_pair} | {metric['ma_period']}-hr MA: {metric['ma']:0.8f} | price-to-MA: {metric['price_to_ma']:0.4f}\n"
+        ma_ratios += f"{crypto}: close: {metric['close']:0.8f} {base_pair} | {metric['ma_period']}-hr MA: {metric['ma']:0.8f} | price-to-MA: {metric['price_to_ma']:0.4f} | positions: {num_positions[crypto]}\n"
+
+        # Our target crypto's metric will be the first one on this list that isn't overpositioned
+        if not target_metric and crypto not in over_positioned:
+            target_metric = metric
     print(ma_ratios)
 
-    # Set up a market buy for the first result
-    metric = metrics_sorted[0]
-    market = metric['market']
+    # Set up a market buy for the first result that isn't overpositioned
+    market = target_metric['market']
     crypto = market[:(-1 * len(base_pair))]
-    exchange_name = metric['exchange']
+    exchange_name = target_metric['exchange']
     exchange = exchanges[exchange_name]
-    ma_period = metric['ma_period']
-    price_to_ma = metric['price_to_ma']
+    ma_period = target_metric['ma_period']
+    price_to_ma = target_metric['price_to_ma']
 
     current_price = exchange.get_current_ask(market)
 
@@ -189,6 +205,7 @@ if __name__ == '__main__':
             purchase_price=results['price'],
             fees=results['fees'],
             timestamp=results['timestamp'],
+            watchlist=",".join(watchlist),
         )
 
         # Send SNS message
