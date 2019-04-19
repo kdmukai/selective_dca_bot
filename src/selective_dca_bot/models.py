@@ -314,7 +314,7 @@ class LongPosition(BaseModel):
     watchlist = CharField()
 
     def __str__(self):
-        return f"{self.id}: {self.market} {time.ctime(self.date_created)}"
+        return f"{self.id}: {self.market} {time.ctime(self.timestamp)}"
 
     def save(self, *args, **kwargs):
         self.last_updated = datetime.datetime.now()
@@ -332,11 +332,19 @@ class LongPosition(BaseModel):
             return None
 
     @staticmethod
-    def get_num_positions(market=None):
+    def get_num_positions(market=None, limit=None):
         if market:
-            return LongPosition.select().where(LongPosition.market == market).count()
+            return LongPosition.select(
+                ).where(
+                    LongPosition.market == market
+                ).order_by(
+                    LongPosition.timestamp.desc()
+                ).limit(limit).count()
         else:
-            return LongPosition.select().count()
+            return LongPosition.select(
+                ).order_by(
+                    LongPosition.timestamp.desc()
+                ).limit(limit).count()
 
     @staticmethod
     def get_results(since=timedelta(days=1)):

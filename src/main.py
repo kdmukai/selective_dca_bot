@@ -140,13 +140,16 @@ if __name__ == '__main__':
     config.params = params
     config.interval = Candle.INTERVAL__1HOUR
 
-    # Are we too heavily weighted on a crypto on our watchlist?
+    # If multiple MA periods are passed, will calculate the price-to-MA with the lowest MA
+    ma_periods = [200]
+
+    # Are we too heavily weighted on a crypto on our watchlist over the last N periods?
     over_positioned = []
     num_positions = {}
-    total_positions = LongPosition.get_num_positions()
+    total_positions = LongPosition.get_num_positions(limit=max(ma_periods))
     for crypto in watchlist:
         market = f"{crypto}{base_pair}"
-        num_positions[crypto] = LongPosition.get_num_positions(market)
+        num_positions[crypto] = LongPosition.get_num_positions(market, limit=max(ma_periods))
         if Decimal(num_positions[crypto] / total_positions) >= max_crypto_holdings_percentage:
             over_positioned.append(crypto)
 
@@ -161,9 +164,6 @@ if __name__ == '__main__':
             }
         )
 
-    # If multiple MA periods are passed, will calculate the price-to-MA with the lowest MA
-    ma_periods = [200]
-
     # Retrieve exchanges, initialize each crypto on its watchlist, and update latest candles
     exchanges = ExchangesManager.get_exchanges(exchanges_data)
     metrics = []
@@ -175,12 +175,16 @@ if __name__ == '__main__':
     target_metric = None
     for metric in metrics_sorted:
         crypto = metric['market'][:(-1 * len(base_pair))]
-        ma_ratios += f"{crypto}: close: {metric['close']:0.8f} {base_pair} | {metric['ma_period']}-hr MA: {metric['ma']:0.8f} | price-to-MA: {metric['price_to_ma']:0.4f} | positions: {num_positions[crypto]}\n"
+        ma_ratios += f"{crypto}: price-to-MA: {metric['price_to_ma']:0.4f} | positions: {num_positions[crypto]}\n"
 
         # Our target crypto's metric will be the first one on this list that isn't overpositioned
         if not target_metric and crypto not in over_positioned:
             target_metric = metric
     print(ma_ratios)
+
+    if not target_metric:
+        # All of the cryptos failed the over positioned test?!
+        target_metric = metrics_sorted[0]
 
     # Set up a market buy for the first result that isn't overpositioned
     market = target_metric['market']
