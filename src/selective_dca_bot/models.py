@@ -392,6 +392,7 @@ class LongPosition(BaseModel):
         markets = [lp.market for lp in LongPosition.select(LongPosition.market).distinct()]
 
         results = []
+        result_str = ""
         total_net = Decimal('0.0')
         total_spent = Decimal('0.0')
         for market in markets:
@@ -427,10 +428,12 @@ class LongPosition(BaseModel):
 
         total_percentage = (total_net / total_spent * Decimal('100.0')).quantize(Decimal('0.01'))
         for result in sorted(results, key=lambda i: i['profit'], reverse=True):
-            print(f"{'{:>8}'.format(result['market'])}: {'{:>11}'.format(str(result['profit']))} | {'{:>6}'.format(str(result['profit_percentage']))}%")
+            result_str += f"{'{:>8}'.format(result['market'])}: {'{:>11}'.format(str(result['profit']))} | {'{:>6}'.format(str(result['profit_percentage']))}%\n"
 
-        print(f"{'-' * 31}")
-        print(f"   total: {'{:>11}'.format(str(total_net))} | {'{:>6}'.format(str(total_percentage))}%")
+        result_str += f"{'-' * 31}\n"
+        result_str += f"   total: {'{:>11}'.format(str(total_net))} | {'{:>6}'.format(str(total_percentage))}%\n"
+
+        return result_str
 
 
     @staticmethod
