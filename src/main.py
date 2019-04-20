@@ -216,6 +216,8 @@ if __name__ == '__main__':
         subject = f"Bought {results['quantity'].normalize()} {crypto} ({price_to_ma*Decimal('100.0'):0.2f}% of {ma_period}-hr MA)"
         print(subject)
         message = ma_ratios
+        message += "\n\n" + LongPosition.current_profit()
+
         sns.publish(
             TopicArn=sns_topic,
             Subject=subject,

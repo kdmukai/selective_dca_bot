@@ -383,6 +383,55 @@ class LongPosition(BaseModel):
                 LongPosition.date_closed >= d
             )
 
+    @property
+    def timestamp_str(self):
+        return datetime.datetime.fromtimestamp(self.timestamp).strftime('%Y-%m-%d %H:%M:%S')
+
+    @staticmethod
+    def current_profit():
+        markets = [lp.market for lp in LongPosition.select(LongPosition.market).distinct()]
+
+        results = []
+        total_net = Decimal('0.0')
+        total_spent = Decimal('0.0')
+        for market in markets:
+            current_price = Candle.select(
+                ).where(
+                    Candle.market == market
+                ).order_by(
+                    Candle.timestamp.desc()
+                ).limit(1)[0].close
+
+            (quantity, spent) = LongPosition.select(
+                    fn.SUM(LongPosition.buy_quantity),
+                    fn.SUM(LongPosition.buy_quantity * LongPosition.purchase_price)
+                ).where(
+                    LongPosition.market == market
+                ).scalar(as_tuple=True)
+
+            quantity = Decimal(quantity)
+            spent = Decimal(spent)
+
+            current_value = quantity * current_price
+
+            profit = (current_value - spent).quantize(Decimal('0.00000001'))
+            total_net += profit
+            total_spent += spent
+            profit_percentage = (current_value / spent * Decimal('100.0')).quantize(Decimal('0.01'))
+
+            results.append({
+                "market": market,
+                "profit": profit,
+                "profit_percentage": profit_percentage
+            })
+
+        total_percentage = (total_net / total_spent * Decimal('100.0')).quantize(Decimal('0.01'))
+        for result in sorted(results, key=lambda i: i['profit'], reverse=True):
+            print(f"{'{:>8}'.format(result['market'])}: {'{:>11}'.format(str(result['profit']))} | {'{:>6}'.format(str(result['profit_percentage']))}%")
+
+        print(f"{'-' * 31}")
+        print(f"   total: {'{:>11}'.format(str(total_net))} | {'{:>6}'.format(str(total_percentage))}%")
+
 
     @staticmethod
     def overall_stats():
