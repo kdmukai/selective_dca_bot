@@ -13,6 +13,11 @@ class ExchangesManager():
                 ex[EXCHANGE__BINANCE] = BinanceExchange(exchange['key'], exchange['secret'], exchange['watchlist'])
 
             # Also update the exchange's all-time watchlist
+            if not AllTimeWatchlist.get_watchlist(exchange=EXCHANGE__BINANCE):
+                AllTimeWatchlist.create(
+                    exchange=EXCHANGE__BINANCE,
+                    watchlist=''
+                )
             AllTimeWatchlist.update_watchlist(watchlist=exchange['watchlist'], exchange=EXCHANGE__BINANCE)
 
         return ex

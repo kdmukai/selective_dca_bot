@@ -327,7 +327,10 @@ class AllTimeWatchlist(BaseModel):
 
     @staticmethod
     def get_watchlist(exchange=EXCHANGE__BINANCE):
-        return AllTimeWatchlist.select().where(AllTimeWatchlist.exchange == exchange)[0].watchlist.split(',')
+        try:
+            return AllTimeWatchlist.select().where(AllTimeWatchlist.exchange == exchange)[0].watchlist.split(',')
+        except Exception:
+            return None
 
     @staticmethod
     def update_watchlist(watchlist, exchange=EXCHANGE__BINANCE):
