@@ -16,7 +16,7 @@ class ExchangesManager():
             if not AllTimeWatchlist.get_watchlist(exchange=EXCHANGE__BINANCE):
                 AllTimeWatchlist.create(
                     exchange=EXCHANGE__BINANCE,
-                    watchlist=''
+                    watchlist=','.join(exchange['watchlist'])
                 )
             AllTimeWatchlist.update_watchlist(watchlist=exchange['watchlist'], exchange=EXCHANGE__BINANCE)
 
