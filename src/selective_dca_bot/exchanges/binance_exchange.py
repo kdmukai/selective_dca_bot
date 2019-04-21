@@ -7,16 +7,16 @@ from binance.client import Client
 from decimal import Decimal
 from termcolor import cprint
 
+from .constants import EXCHANGE__BINANCE
 from .abstract_exchange import AbstractExchange
-from ..models import (Candle, MarketParams, Balance)
+
 from .. import config
+from ..models import Candle, MarketParams
 
 
 
 class BinanceExchange(AbstractExchange):
-    from ..models import Candle
-
-    _exchange_name = 'binance'
+    _exchange_name = EXCHANGE__BINANCE
     _exchange_token = 'BNB'
     _intervals = {
         Candle.INTERVAL__1MINUTE: Client.KLINE_INTERVAL_1MINUTE,
@@ -38,54 +38,6 @@ class BinanceExchange(AbstractExchange):
     @property
     def exchange_name(self):
         return self._exchange_name
-
-
-    def calculate_latest_metrics(self, base_pair, ma_periods):
-        metrics = []
-        interval = config.interval
-        for crypto in self.watchlist:
-            market = f"{crypto}{base_pair}"
-            self.initialize_market(market)
-
-            # How many candles do we need to catch up on?
-            last_candle = Candle.get_last_candle(market, interval)
-            if last_candle:
-                num_candles = last_candle.num_periods_from_now()
-                if num_candles > max(ma_periods):
-                    num_candles = max(ma_periods)
-            else:
-                num_candles = max(ma_periods) + 1
-
-            self.ingest_latest_candles(market, interval, num_candles)
-
-            # Calculate the metrics for the current candle
-            last_candle = Candle.get_last_candle(market, interval)
-
-            min_ma_period = None
-            min_ma = Decimal('99999999.0')
-            min_price_to_ma = None
-            for ma_period in ma_periods:
-                ma = last_candle.calculate_moving_average(ma_period)
-                price_to_ma = last_candle.close / ma
-
-                # use the lowest MA across all supplied ma_periods
-                if ma < min_ma:
-                    min_price_to_ma = price_to_ma
-                    min_ma_period = ma_period
-                    min_ma = ma
-
-            metrics.append({
-                'exchange': self.exchange_name,
-                'market': market,
-                'close': last_candle.close,
-                'ma_period': min_ma_period,
-                'ma': min_ma,
-                'price_to_ma': min_price_to_ma
-            })
-
-            # print(f"{last_candle.market}: close: {last_candle.close:0.8f} | 200H_MA: {ma:0.8f} | price-to-MA: {price_to_ma:0.4f}")
-
-        return metrics
 
 
     def initialize_market(self, market):

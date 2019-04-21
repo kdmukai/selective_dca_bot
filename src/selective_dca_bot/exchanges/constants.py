@@ -1,0 +1,1 @@
+EXCHANGE__BINANCE = 'binance'

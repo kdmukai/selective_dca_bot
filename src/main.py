@@ -7,8 +7,8 @@ import time
 from decimal import Decimal
 from datetime import timedelta
 
-from selective_dca_bot import config
-from selective_dca_bot.exchanges import BinanceExchange, ExchangesManager
+from selective_dca_bot import config, utils
+from selective_dca_bot.exchanges import BinanceExchange, ExchangesManager, EXCHANGE__BINANCE
 from selective_dca_bot.models import Candle, LongPosition
 
 
@@ -49,17 +49,11 @@ parser.add_argument('-l', '--live',
                     dest="live_mode",
                     help="""Submit live orders. When omitted runs in simulation mode""")
 
-parser.add_argument('-r', '--daily_report',
+parser.add_argument('-r', '--performance_report',
                     action='store_true',
                     default=False,
-                    dest="daily_report",
-                    help="""Send out summary of day's activity""")
-
-parser.add_argument('-w', '--weekly_report',
-                    action='store_true',
-                    default=False,
-                    dest="weekly_report",
-                    help="""Send out summary of the week's activity""")
+                    dest="performance_report",
+                    help="""Compare purchase decisions against random portfolio selections""")
 
 
 def get_timestamp():
@@ -73,8 +67,7 @@ if __name__ == '__main__':
     base_pair = args.base_pair
     live_mode = args.live_mode
     config.is_test = not live_mode
-    daily_report = args.daily_report
-    weekly_report = args.weekly_report
+    performance_report = args.performance_report
     # num_buys = args.num_buys
     exchange_list = args.exchanges.split(',')
 
@@ -102,26 +95,9 @@ if __name__ == '__main__':
     except configparser.NoSectionError:
         sns_topic = None
 
-    if daily_report:
-        from selective_dca_bot.models import LongPosition
-        from selective_dca_bot import Twitter
-        print("Tweeting out daily report!")
-        results = LongPosition.get_24hr_results()
-        message = "Results from the last 24hrs:\n\n"
-        message += f"Total trades: {results['num_trades']}\n"
-        message += f"Profit: {results['profit_percentage'] * 100.0:.2f}%\n"
-        Twitter().tweet(message)
-        exit()
-
-    elif weekly_report:
-        from selective_dca_bot.models import LongPosition
-        from selective_dca_bot import Twitter
-        print("Tweeting out weekly report!")
-        results = LongPosition.get_results(since=timedelta(days=7))
-        message = "Results from the last week:\n\n"
-        message += f"Total trades: {results['num_trades']}\n"
-        message += f"Profit: {results['profit_percentage'] * 100.0:.2f}%\n"
-        Twitter().tweet(message)
+    if performance_report:
+        from selective_dca_bot.models import LongPosition, Candle
+        results = LongPosition.get_performance_report()
         exit()
 
     # Read crypto watchlist
@@ -154,10 +130,10 @@ if __name__ == '__main__':
             over_positioned.append(crypto)
 
     exchanges_data = []
-    if 'binance' in exchange_list:
+    if EXCHANGE__BINANCE in exchange_list:
         exchanges_data.append(
             {
-                'name': 'binance',
+                'name': EXCHANGE__BINANCE,
                 'key': binance_key,
                 'secret': binance_secret,
                 'watchlist': binance_watchlist,
@@ -168,7 +144,7 @@ if __name__ == '__main__':
     exchanges = ExchangesManager.get_exchanges(exchanges_data)
     metrics = []
     for name, exchange in exchanges.items():
-        metrics.extend(exchange.calculate_latest_metrics(base_pair=base_pair, ma_periods=ma_periods))
+        metrics.extend(exchange.calculate_latest_metrics(base_pair=base_pair, interval=config.interval, ma_periods=ma_periods))
 
     metrics_sorted = sorted(metrics, key = lambda i: i['price_to_ma'])
     ma_ratios = ""
@@ -212,7 +188,7 @@ if __name__ == '__main__':
             watchlist=",".join(watchlist),
         )
 
-        current_profit = LongPosition.current_profit()
+        current_profit = utils.current_profit()
         print(current_profit)
 
         # Send SNS message

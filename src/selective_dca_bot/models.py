@@ -12,7 +12,7 @@ from peewee import (fn, SqliteDatabase, Model, CharField, SmallIntegerField,
                     BooleanField, DateTimeField, SQL, DecimalField, IntegerField,
                     Window)
 
-from selective_dca_bot import config
+from . import config
 
 import sqlite3
 from io import StringIO
@@ -205,105 +205,6 @@ class Candle(BaseModel):
 
 
 
-class Balance(BaseModel):
-    date_created = TimestampField(default=datetime.datetime.now)
-    asset = CharField(default='BTC')
-    balance = DecimalField()
-    is_test = BooleanField(default=True)
-
-    @staticmethod
-    def get_current_balance(asset='BTC'):
-        b = Balance.select(
-            ).where(
-                Balance.asset == asset,
-                Balance.is_test == config.is_test
-            ).order_by(-Balance.id).limit(1)
-        if b.exists():
-            return b[0].balance
-        else:
-            return None
-
-
-    @staticmethod
-    def get_initial_balance(asset='BTC'):
-        b = Balance.select(
-            ).where(
-                Balance.asset == asset,
-                Balance.is_test == config.is_test
-            ).order_by(Balance.id).limit(1)
-        if b.exists():
-            return b[0].balance
-        else:
-            return None
-
-
-    @staticmethod
-    def set_balance(new_current_balance, asset='BTC'):
-        b = Balance.select(
-            ).where(
-                Balance.asset == asset,
-                Balance.is_test == config.is_test
-            ).order_by(-Balance.id).limit(1)
-
-        # Create a new Balance if there's no previous entry or if the balance has changed.
-        if not b or len(b) == 0 or b[0].balance != new_current_balance:
-            Balance.create(
-                asset=asset,
-                balance=new_current_balance,
-                is_test=config.is_test
-            )
-
-
-    @staticmethod
-    def increment_balance(amount, asset='BTC'):
-        """
-            We always preserve the Balance at each point in time so this
-                just creates a new Balance with the updated total.
-        """
-        b = Balance.select(
-            ).where(
-                Balance.asset == asset,
-                Balance.is_test == config.is_test
-            ).order_by(-Balance.id).limit(1)[0]
-
-        Balance.create(
-            asset=asset,
-            balance=(b.balance + amount).quantize(Decimal('0.00000001'), rounding=decimal.ROUND_DOWN),
-            is_test=config.is_test
-        )
-
-
-    @staticmethod
-    def reset_test_balance(initial_BTC_balance=Decimal('0.05'), initial_BNB_balance=Decimal('0.005')):
-        if config.verbose:
-            print(f"Reseting test balance to {initial_BTC_balance} BTC / {initial_BNB_balance} BNB")
-        Balance.delete().where(Balance.is_test == True).execute()  # noqa: E712,E501; query fails with 'is'
-        Balance.create(
-            asset='BTC',
-            balance=initial_BTC_balance,
-            is_test=True
-        )
-        Balance.create(
-            asset='BNB',
-            balance=initial_BNB_balance,
-            is_test=True
-        )
-
-
-
-class ExchangeTokenReload(BaseModel):
-    """
-        Log exchange token buys separately from LongPositions to avoid any confusion
-        about open trades vs exchange token reloads.
-    """
-    market = CharField()
-    date_created = DateTimeField(default=datetime.datetime.now)
-    buy_quantity = DecimalField()
-    purchase_price = DecimalField()
-    fees = DecimalField()
-
-
-
 class LongPosition(BaseModel):
     market = CharField()
     buy_order_id = IntegerField()
@@ -373,7 +274,6 @@ class LongPosition(BaseModel):
             "fees": result[0].total_fees,
         }
 
-
     @staticmethod
     def get_positions_since(since=timedelta(days=1)):
         yesterday = datetime.datetime.now() - since
@@ -387,200 +287,9 @@ class LongPosition(BaseModel):
     def timestamp_str(self):
         return datetime.datetime.fromtimestamp(self.timestamp).strftime('%Y-%m-%d %H:%M:%S')
 
-    @staticmethod
-    def current_profit():
-        markets = [lp.market for lp in LongPosition.select(LongPosition.market).distinct()]
-
-        results = []
-        result_str = ""
-        total_net = Decimal('0.0')
-        total_spent = Decimal('0.0')
-        for market in markets:
-            current_price = Candle.select(
-                ).where(
-                    Candle.market == market
-                ).order_by(
-                    Candle.timestamp.desc()
-                ).limit(1)[0].close
-
-            (quantity, spent) = LongPosition.select(
-                    fn.SUM(LongPosition.buy_quantity),
-                    fn.SUM(LongPosition.buy_quantity * LongPosition.purchase_price)
-                ).where(
-                    LongPosition.market == market
-                ).scalar(as_tuple=True)
-
-            quantity = Decimal(quantity)
-            spent = Decimal(spent)
-
-            current_value = quantity * current_price
-
-            profit = (current_value - spent).quantize(Decimal('0.00000001'))
-            total_net += profit
-            total_spent += spent
-            profit_percentage = (current_value / spent * Decimal('100.0')).quantize(Decimal('0.01'))
-
-            results.append({
-                "market": market,
-                "profit": profit,
-                "profit_percentage": profit_percentage
-            })
-
-        total_percentage = (total_net / total_spent * Decimal('100.0')).quantize(Decimal('0.01'))
-        for result in sorted(results, key=lambda i: i['profit'], reverse=True):
-            result_str += f"{'{:>8}'.format(result['market'])}: {'{:>11}'.format(str(result['profit']))} | {'{:>6}'.format(str(result['profit_percentage']))}%\n"
-
-        result_str += f"{'-' * 31}\n"
-        result_str += f"   total: {'{:>11}'.format(str(total_net))} | {'{:>6}'.format(str(total_percentage))}%\n"
-
-        return result_str
-
-
-    @staticmethod
-    def overall_stats():
-        if LongPosition.select().where(LongPosition.is_test == config.is_test).count() == 0:
-            return {}
-
-        lps = LongPosition.select(
-                ((LongPosition.profit) / LongPosition.sell_quantity / LongPosition.purchase_price).alias('profit_percentage')
-            ).where(
-                LongPosition.profit >= Decimal('0.0'),
-                LongPosition.is_test == config.is_test
-            ).order_by(SQL('profit_percentage'))
-        if len(lps) > 0:
-            median_profit_percentage = Decimal(lps[round((len(lps) - 1)/2)].profit_percentage)
-        else:
-            median_profit_percentage = Decimal('0.0')
-
-        lps = LongPosition.select(
-                ((LongPosition.profit) / LongPosition.sell_quantity / LongPosition.purchase_price).alias('profit_percentage')
-            ).where(
-                LongPosition.profit < Decimal('0.0'),
-                LongPosition.is_test == config.is_test
-            ).order_by(SQL('profit_percentage'))
-        if len(lps) > 0:
-            median_loss_percentage = Decimal(lps[round((len(lps) - 1)/2)].profit_percentage)
-        else:
-            median_loss_percentage = Decimal('0.0')
-
-        return {
-            "profit": Decimal(LongPosition.select(fn.SUM(LongPosition.profit)
-                ).where(LongPosition.is_test == config.is_test
-                ).scalar()),
-            "median_profit_percentage": median_profit_percentage,
-            "median_loss_percentage": median_loss_percentage,
-            "max_profit_percentage": Decimal(LongPosition.select(
-                    fn.MAX(LongPosition.profit / LongPosition.sell_quantity / LongPosition.purchase_price)
-                ).where(LongPosition.is_test == config.is_test
-                ).scalar()),
-            "min_profit_percentage": Decimal(LongPosition.select(
-                    fn.MIN(LongPosition.profit / LongPosition.sell_quantity / LongPosition.purchase_price)
-                ).where(LongPosition.is_test == config.is_test
-                ).scalar()),
-            "num_positions": LongPosition.select(fn.COUNT()
-                ).where(LongPosition.is_test == config.is_test
-                ).scalar(),
-            "avg_order_size": Decimal(LongPosition.select(
-                    fn.AVG(LongPosition.sell_quantity * LongPosition.purchase_price)
-                ).where(LongPosition.is_test == config.is_test
-                ).scalar()),
-            "total_fees": Decimal(LongPosition.select(fn.SUM(LongPosition.fees)
-                ).where(LongPosition.is_test == config.is_test
-                ).scalar()),
-        }
-
-
-    @staticmethod
-    def detailed_stats():
-        result = ""
-
-        # Report by day
-        result += "Daily Results:\n"
-        positions = LongPosition.select(
-            ).where(LongPosition.is_test == config.is_test
-            ).order_by(LongPosition.date_created)
-
-        if not positions or len(positions) == 0:
-            return "No trades"
-
-        daily_profit = Decimal('0.0')
-        daily_positions = 0
-        daily_spent = Decimal('0.0')
-        cur_date = datetime.datetime.fromtimestamp(positions[0].date_created).astimezone(pytz.timezone('UTC'))
-        for i, position in enumerate(positions):
-            pos_date = datetime.datetime.fromtimestamp(position.date_created).astimezone(pytz.timezone('UTC'))
-            if (pos_date.year == cur_date.year and
-                    pos_date.month == cur_date.month and
-                    pos_date.day == cur_date.day):
-                if position.profit:
-                    daily_profit += position.profit
-                    daily_spent += position.purchase_price * position.sell_quantity
-                daily_positions += 1
-
-            if (pos_date.year != cur_date.year or
-                    pos_date.month != cur_date.month or
-                    pos_date.day != cur_date.day or
-                    i == len(positions) - 1):
-                # Write out the results
-                result += (f"{cur_date.date()}: " +
-                           f"{Fore.GREEN if daily_profit >= Decimal('0.0') else Fore.RED}" +
-                           f"{daily_profit:12.8f} BTC" +
-                           f" | {daily_profit / daily_spent * Decimal('100.0'):6.2f}%" +
-                           f"{Style.RESET_ALL}" +
-                           f" | num_positions: {daily_positions:3}\n")
-
-                # Update for the next loop, if there is one
-                cur_date = pos_date
-                if position.profit:
-                    daily_profit = position.profit
-                daily_positions = 1
-
-        result += "\n"
-        result += "Individual Crypto Performance\n"
-        positions = LongPosition.select(LongPosition.market,
-                                        fn.SUM(LongPosition.profit).alias('net_profit'),
-                                        (fn.SUM(LongPosition.profit) / fn.SUM(LongPosition.purchase_price * LongPosition.sell_quantity)).alias('profit_percentage'),
-                                        fn.COUNT().alias('num_positions')
-                                    ).where(
-                                        LongPosition.is_test == config.is_test,
-                                        LongPosition.profit != None     # noqa: E711
-                                    ).group_by(LongPosition.market
-                                    ).order_by(SQL('net_profit').desc())
-
-        for position in positions:
-            # Write out the results
-            result += (f"{Fore.GREEN if position.net_profit >= 0.0 else Fore.RED}" +
-                       f"{position.market}: {position.net_profit:12.8f} BTC" +
-                       f" | {position.profit_percentage * 100.0:6.2f}%" +
-                       f"{Style.RESET_ALL}" +
-                       f" | num_positions: {position.num_positions:3}\n")
-
-        result += "\n"
-        result += "Trade History\n"
-        positions = LongPosition.select(
-            ).where(LongPosition.is_test == config.is_test
-            ).order_by(LongPosition.id)
-
-        for position in positions:
-            result += ( f"{datetime.datetime.fromtimestamp(position.date_created):%Y-%m-%d %H:%M}" +
-                        f" | {Fore.GREEN if position.profit and position.profit >= 0.0 else Fore.RED}" +
-                        f"{position.market[:-3]}{Style.RESET_ALL}" +
-                        f" | bought {position.buy_quantity:6f} @ {position.purchase_price:.8f} BTC")
-            if position.profit:
-                result += ( f" | {datetime.datetime.fromtimestamp(position.date_closed):%Y-%m-%d %H:%M}" +
-                            f" | {int(position.time_open / 60):4}" +
-                            f" | sold @ {position.stop_loss_price:.8f} BTC" +
-                            f" | {Fore.GREEN if position.profit >= 0.0 else Fore.RED}" +
-                            f"{position.profit:11.8f} BTC" +
-                            f" | {position.profit / (position.purchase_price * position.sell_quantity) * Decimal('100.0'):6.2f}%" +
-                            f"{Style.RESET_ALL}")
-            else:
-                result += " | (position still open)"
-
-            result += "\n"
-
-
-        return result
+    @property
+    def spent(self, exclude_fees=True):
+        return self.buy_quantity * self.purchase_price
 
 
 
@@ -610,19 +319,35 @@ class MarketParams(BaseModel):
             return m[0]
 
 
+class AllTimeWatchlist(BaseModel):
+    from .exchanges.constants import EXCHANGE__BINANCE    # Avoid circular deps
+
+    exchange = CharField(default=EXCHANGE__BINANCE)
+    watchlist = CharField(null=True)
+
+    @staticmethod
+    def get_watchlist(exchange=EXCHANGE__BINANCE):
+        return AllTimeWatchlist.select().where(AllTimeWatchlist.exchange == exchange)[0].watchlist.split(',')
+
+    @staticmethod
+    def update_watchlist(watchlist, exchange=EXCHANGE__BINANCE):
+        atw = AllTimeWatchlist.select().where(AllTimeWatchlist.exchange == exchange)[0]
+        alltime = set(atw.watchlist.split(','))
+        alltime.update(watchlist)
+        atw.watchlist = ",".join(sorted(alltime))
+        atw.save()
+
+
 
 if not Candle.table_exists():
     Candle.create_table(True)
-
-if not Balance.table_exists():
-    Balance.create_table(True)
-
-if not ExchangeTokenReload.table_exists():
-    ExchangeTokenReload.create_table(True)
 
 if not LongPosition.table_exists():
     LongPosition.create_table(True)
 
 if not MarketParams.table_exists():
     MarketParams.create_table(True)
+
+if not AllTimeWatchlist.table_exists():
+    AllTimeWatchlist.create_table(True)
 
