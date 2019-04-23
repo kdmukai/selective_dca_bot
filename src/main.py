@@ -151,6 +151,10 @@ if __name__ == '__main__':
     target_metric = None
     for metric in metrics_sorted:
         crypto = metric['market'][:(-1 * len(base_pair))]
+        if crypto not in watchlist:
+            # This is a historical crypto being updated
+            continue
+            
         ma_ratios += f"{crypto}: price-to-MA: {metric['price_to_ma']:0.4f} | positions: {num_positions[crypto]}\n"
 
         # Our target crypto's metric will be the first one on this list that isn't overpositioned
