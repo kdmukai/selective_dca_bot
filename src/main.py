@@ -179,7 +179,7 @@ if __name__ == '__main__':
 
     if quantized_qty * current_price < market_params.min_notional:
         # Final order size isn't big enough
-        print("Must increase quantized_qty")
+        print("Must increase quantized_qty: {quantized_qty} * {current_price} < {market_params.min_notional}")
         quantized_qty += market_params.lot_step_size
 
     print(f"Buy: {quantized_qty:0.6f} {crypto} @ {current_price:0.8f} {base_pair}")
