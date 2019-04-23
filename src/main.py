@@ -9,7 +9,7 @@ from datetime import timedelta
 
 from selective_dca_bot import config, utils
 from selective_dca_bot.exchanges import BinanceExchange, ExchangesManager, EXCHANGE__BINANCE
-from selective_dca_bot.models import Candle, LongPosition
+from selective_dca_bot.models import Candle, LongPosition, MarketParams
 
 
 parser = argparse.ArgumentParser(description='Selective DCA (Dollar Cost Averaging) Bot')
@@ -173,10 +173,19 @@ if __name__ == '__main__':
     current_price = exchange.get_current_ask(market)
 
     quantity = buy_amount / current_price
-    print(f"Buy: {quantity:0.6f} {crypto} @ {current_price:0.8f} {base_pair}")
+
+    market_params = MarketParams.get_market(market)
+    quantized_qty = quantity.quantize(market_params.lot_step_size)
+
+    if quantized_qty * current_price < market_params.min_notional:
+        # Final order size isn't big enough
+        print("Must increase quantized_qty")
+        quantized_qty += market_params.lot_step_size
+
+    print(f"Buy: {quantized_qty:0.6f} {crypto} @ {current_price:0.8f} {base_pair}")
 
     if live_mode:
-        results = exchange.buy(market, quantity)
+        results = exchange.buy(market, quantized_qty)
 
         LongPosition.create(
             market=market,
