@@ -108,7 +108,11 @@ class Candle(BaseModel):
 
     @staticmethod
     def get_last_candle(market, interval):
-        return Candle.get_last_candles(market, interval, 1)
+        c = Candle.get_last_candles(market, interval, 1)
+        if not c:
+            return None
+
+        return c[0]
 
 
     @staticmethod
@@ -149,15 +153,6 @@ class Candle(BaseModel):
                 Candle.timestamp == historical_timestamp
             )
         if not c or len(c) == 0:
-            return None
-
-        return c[0]
-
-
-    @staticmethod
-    def get_last_candle(market, interval):
-        c = Candle.get_last_candles(market, interval, 1)
-        if not c:
             return None
 
         return c[0]
@@ -213,6 +208,9 @@ class LongPosition(BaseModel):
     fees = DecimalField()
     timestamp = DateTimeField()
     watchlist = CharField()
+    sell_quantity = DecimalField()
+    sell_price = DecimalField()
+    sell_timestamp = DateTimeField()
 
     def __str__(self):
         return f"{self.id}: {self.market} {time.ctime(self.timestamp)}"
@@ -282,6 +280,21 @@ class LongPosition(BaseModel):
             ).where(
                 LongPosition.date_closed >= d
             )
+
+    @staticmethod
+    def get_open_positions(market=None):
+        if market:
+            return LongPosition.select(
+                ).where(
+                    LongPosition.market == market,
+                    LongPosition.sell_quantity is None
+                )
+        else:
+            return LongPosition.select(
+                ).where(
+                    LongPosition.sell_quantity is None
+                )
+
 
     @property
     def timestamp_str(self):

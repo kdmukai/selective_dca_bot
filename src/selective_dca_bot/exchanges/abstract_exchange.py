@@ -10,8 +10,13 @@ class AbstractExchange(ABC):
         self.watchlist = watchlist
 
 
-    @abstractmethod     # Must be implemented in the derived classes in order to call
+    @abstractmethod
     def initialize_market(self, market):
+        pass
+
+
+    @abstractmethod
+    def market_sell(self, market, quantity):
         pass
 
 

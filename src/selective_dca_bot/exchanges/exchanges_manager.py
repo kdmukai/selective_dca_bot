@@ -21,3 +21,4 @@ class ExchangesManager():
             AllTimeWatchlist.update_watchlist(watchlist=exchange['watchlist'], exchange=exchange['name'])
 
         return ex
+

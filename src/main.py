@@ -49,6 +49,12 @@ parser.add_argument('-l', '--live',
                     dest="live_mode",
                     help="""Submit live orders. When omitted runs in simulation mode""")
 
+parser.add_argument('-s', '--sells-enabled',
+                    action='store_true',
+                    default=False,
+                    dest="sells_enabled",
+                    help="""Sell off previously purchased positions if they've reached the profit threshold""")
+
 parser.add_argument('-r', '--performance_report',
                     action='store_true',
                     default=False,
@@ -66,6 +72,7 @@ if __name__ == '__main__':
     buy_amount = args.buy_amount
     base_pair = args.base_pair
     live_mode = args.live_mode
+    sells_enabled = args.sells_enabled
     config.is_test = not live_mode
     performance_report = args.performance_report
     # num_buys = args.num_buys
@@ -79,6 +86,9 @@ if __name__ == '__main__':
     binance_secret = arg_config.get('API', 'BINANCE_SECRET')
 
     max_crypto_holdings_percentage = Decimal(arg_config.get('CONFIG', 'MAX_CRYPTO_HOLDINGS_PERCENTAGE'))
+    ma_ratio_profit_threshold = Decimal(arg_config.get('CONFIG', 'MA_RATIO_PROFIT_THRESHOLD'))
+    min_profit = Decimal(arg_config.get('CONFIG', 'MIN_PROFIT'))
+    profit_threshold = Decimal(arg_config.get('CONFIG', 'PROFIT_THRESHOLD'))
 
     try:
         sns_topic = arg_config.get('AWS', 'SNS_TOPIC')
@@ -119,10 +129,14 @@ if __name__ == '__main__':
     # If multiple MA periods are passed, will calculate the price-to-MA with the lowest MA
     ma_periods = [200]
 
-    # Are we too heavily weighted on a crypto on our watchlist over the last N periods?
+
+    #------------------------------------------------------------------------------------
+    # UPDATE latest candles
     over_positioned = []
     num_positions = {}
     total_positions = LongPosition.get_num_positions(limit=max(ma_periods))
+
+    # Are we too heavily weighted on a crypto on our watchlist over the last N periods?
     for crypto in watchlist:
         market = f"{crypto}{base_pair}"
         num_positions[crypto] = LongPosition.get_num_positions(market, limit=max(ma_periods))
@@ -140,12 +154,76 @@ if __name__ == '__main__':
             }
         )
 
-    # Retrieve exchanges, initialize each crypto on its watchlist, and update latest candles
     exchanges = ExchangesManager.get_exchanges(exchanges_data)
     metrics = []
     for name, exchange in exchanges.items():
         metrics.extend(exchange.calculate_latest_metrics(base_pair=base_pair, interval=config.interval, ma_periods=ma_periods))
 
+
+    #------------------------------------------------------------------------------------
+    # SELL any LongPositions?
+    if sells_enabled:
+        for exchange_name, exchange in exchanges.items():
+            for crypto in AllTimeWatchlist.get_watchlist(exchange=exchange_name):
+                market = f"{crypto}{base_pair}"
+                current_price = Candle.get_last_candle(market, config.interval).close
+                current_ma_ratio = metrics[market]['price_to_ma']
+                positions_to_sell = []
+                sell_quantity = Decimal('0.0')
+                total_spent = Decimal('0.0')
+                for position in LongPosition.get_open_positions(market):
+                    # SELL if:
+                    #   - position is at or above profit_threshold
+                    #   - OR if the current_ma_ratio is spiking and the position is at or
+                    #       above the min_profit level
+                    if current_price / position.purchase_price >= profit_threshold or
+                            (current_ma_ratio >= ma_ratio_profit_threshold and
+                             current_price / position.purchase_price >= min_profit):
+                        positions_to_sell.append(position)
+                        sell_quantity += position.buy_quantity
+                        total_spent += position.spent
+
+                if sell_quantity > Decimal('0.0'):
+                    print(f"SELL {sell_quantity.normalize()} {crypto}")
+
+                    result = exchange.market_sell(market, sell_quantity)
+                    print(result)
+                    """
+                        result = {
+                            "order_id": order_id,
+                            "price": sell_price,
+                            "quantity": total_qty,
+                            "fees": total_commission,
+                            "timestamp": timestamp
+                        }
+                    """
+                    for position in positions_to_sell:
+                        position.sell_quantity = position.buy_quantity
+                        position.sell_price = result['price']
+                        position.sell_timestamp = result['timestamp']
+                        position.save()
+
+                    profit = (sell_quantity * result['price']) - total_spent
+                    profit_percentage = ((sell_quantity * result['price']) / total_spent * Decimal('100.0')).quantize(Decimal('0.01'))
+
+                    # Send SNS message
+                    subject = f"SOLD {sell_quantity.normalize()} {crypto} for {profit:0.8f}{base_pair} ({profit_percentage}%)"
+                    print(subject)
+                    message = f"num_positions: {len(positions_to_sell)}\n"
+                    for position in positions_to_sell:
+                        profit = (position.buy_quantity * result['price']) - position.spent
+                        profit_percentage = ((position.buy_quantity * result['price']) / position.spent * Decimal('100.0')).quantize(Decimal('0.01'))
+                        message += f"{position.timestamp}: {profit:0.8f} | {profit_percentage:3.2f}%\n"
+
+                    sns.publish(
+                        TopicArn=sns_topic,
+                        Subject=subject,
+                        Message=message
+                    )
+
+
+    #------------------------------------------------------------------------------------
+    #  BUY the next target based on the most favorable price_to_ma ratio
     metrics_sorted = sorted(metrics, key = lambda i: i['price_to_ma'])
     ma_ratios = ""
     target_metric = None
@@ -154,7 +232,7 @@ if __name__ == '__main__':
         if crypto not in watchlist:
             # This is a historical crypto being updated
             continue
-            
+
         ma_ratios += f"{crypto}: price-to-MA: {metric['price_to_ma']:0.4f} | positions: {num_positions[crypto]}\n"
 
         # Our target crypto's metric will be the first one on this list that isn't overpositioned

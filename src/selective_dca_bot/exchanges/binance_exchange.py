@@ -282,90 +282,61 @@ class BinanceExchange(AbstractExchange):
     def market_sell(self, market, quantity):
         # Round prices to conform to price_tick_size for this market
         market_params = MarketParams.get_market(market)
+        quantized_qty = quantity.quantize(market_params.lot_step_size)
 
-        # Round the quantity to one less decimal place than specified
-        #   e.g. lot_step_size = '0.001' but round 0.123 to 0.12
-        #   see: https://redd.it/7ej5cn
-        exp = market_params.lot_step_size
-        if market_params.lot_step_size < Decimal('1.0'):
-            exp = Decimal(10.0) ** Decimal(market_params.lot_step_size.as_tuple().exponent + 1)
-        quantized_qty = quantity.quantize(exp, rounding=decimal.ROUND_DOWN)
+        try:
+            response = self.client.order_market_sell(
+                symbol=market,
+                quantity=quantized_qty,
+                newOrderRespType=Client.ORDER_RESP_TYPE_FULL    # Need the full details to get 'commission' (aka fees).
+            )
+        except Exception as e:
+            error_msg = (f"MARKET SELL ORDER: {market}" +
+                         f" | quantized_qty: {quantized_qty}\n" +
+                         f"{e}")
+            cprint(error_msg, "red")
 
-        if config.is_test:
-            sell_price = self.get_current_price(market=market)
+            # TODO: Email error notifications?
+            raise e
 
-            # Add a discount factor to mimic ask-buy spread
-            sell_price += sell_price * Decimal(random.uniform(-0.002, 0.001))
 
-            # Calculate the fees
-            exchange_token_price = self.get_current_price(market=f"{self.exchange_token}BTC")
-            total_commission = sell_price * quantized_qty * Decimal('0.0005') / exchange_token_price
-            total_commission = total_commission.quantize(Decimal('0.00000001'), rounding=decimal.ROUND_DOWN)
+        print(f"MARKET SELL ORDER: {response}")
+
+        order_id = response["orderId"]
+        timestamp = response["transactTime"] / 1000
+
+        if response["status"] != 'FILLED':
+            # TODO: handle unfilled market sells
+            raise Exception(f"Market sell order not FILLED (yet?)\n{response}")
+
+        elif response["status"] == 'FILLED':
+            # Calculate an aggregate sale price
+            total_made = Decimal('0.0')
+            total_qty = Decimal(response["executedQty"])
+            total_commission = Decimal('0.0')
+            for fill in response["fills"]:
+                """ {
+                        "price": "4000.00000000",
+                        "qty": "1.00000000",
+                        "commission": "4.00000000",
+                        "commissionAsset": "BNB"
+                    }
+                """
+                total_made += Decimal(fill["price"]) * Decimal(fill["qty"])
+                total_commission += Decimal(fill["commission"])
+
+            sell_price = total_made / total_qty
 
             return {
-                "order_id": 1,
+                "order_id": order_id,
                 "price": sell_price,
-                "quantity": quantized_qty,
+                "quantity": total_qty,
                 "fees": total_commission,
-                "timestamp": config.historical_timestamp
+                "timestamp": timestamp
             }
 
         else:
-            try:
-                response = self.client.order_market_sell(
-                    symbol=market,
-                    quantity=quantized_qty,
-                    newOrderRespType=Client.ORDER_RESP_TYPE_FULL    # Need the full details to get 'commission' (aka fees).
-                )
-            except Exception as e:
-                error_msg = (f"MARKET SELL ORDER: {market}" +
-                             f" | quantity: {quantity}" +
-                             f" | quantized_qty: {quantized_qty}\n" +
-                             f"{e}")
-                cprint(error_msg, "red")
-
-                # TODO: Email error notifications?
-                raise e
-
-
-            if config.verbose:
-                print(f"MARKET SELL ORDER: {response}")
-
-            order_id = response["orderId"]
-            timestamp = response["transactTime"] / 1000
-
-            if response["status"] != 'FILLED':
-                # TODO: handle unfilled market sells
-                raise Exception(f"Market sell order not FILLED (yet?)\n{response}")
-
-            elif response["status"] == 'FILLED':
-                # Calculate an aggregate sale price
-                total_made = Decimal(0.0)
-                total_qty = Decimal(response["executedQty"])
-                total_commission = Decimal(0.0)
-                for fill in response["fills"]:
-                    """ {
-                            "price": "4000.00000000",
-                            "qty": "1.00000000",
-                            "commission": "4.00000000",
-                            "commissionAsset": "BNB"
-                        }
-                    """
-                    total_made += Decimal(fill["price"]) * Decimal(fill["qty"])
-                    total_commission += Decimal(fill["commission"])
-
-                sell_price = total_made / total_qty
-
-                return {
-                    "order_id": order_id,
-                    "price": sell_price,
-                    "quantity": total_qty,
-                    "fees": total_commission,
-                    "timestamp": timestamp
-                }
-
-            else:
-                raise Exception("Unhandled case!")
+            raise Exception("Unhandled case!")
 
 
     def set_stop_loss(self, market, quantity, stop_loss_price):
