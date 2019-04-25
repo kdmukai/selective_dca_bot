@@ -14,6 +14,7 @@ def current_profit():
     result_str = ""
     total_net = Decimal('0.0')
     total_spent = Decimal('0.0')
+    total_quantity = Decimal('0.0')
     for market in markets:
         current_price = Candle.select(
             ).where(
@@ -32,6 +33,7 @@ def current_profit():
         quantity = Decimal(quantity)
         spent = Decimal(spent)
 
+        total_quantity += quantity
         current_value = quantity * current_price
 
         profit = (current_value - spent).quantize(Decimal('0.00000001'))
@@ -50,7 +52,7 @@ def current_profit():
         result_str += f"{'{:>8}'.format(result['market'])}: {'{:>11}'.format(str(result['profit']))} | {'{:>6}'.format(str(result['profit_percentage']))}%\n"
 
     result_str += f"{'-' * 31}\n"
-    result_str += f"   total: {'{:>11}'.format(str(total_net))} | {'{:>6}'.format(str(total_percentage))}%\n"
+    result_str += f"   total: {'{:>11}'.format(str(total_net))} | {'{:>6}'.format(str(total_percentage))}% | {total_quantity.normalize()}\n"
 
     return result_str
 
