@@ -9,7 +9,7 @@ from datetime import timedelta
 
 from selective_dca_bot import config, utils
 from selective_dca_bot.exchanges import BinanceExchange, ExchangesManager, EXCHANGE__BINANCE
-from selective_dca_bot.models import Candle, LongPosition, MarketParams
+from selective_dca_bot.models import Candle, LongPosition, MarketParams, AllTimeWatchlist
 
 
 parser = argparse.ArgumentParser(description='Selective DCA (Dollar Cost Averaging) Bot')
@@ -158,7 +158,16 @@ if __name__ == '__main__':
     metrics = []
     for name, exchange in exchanges.items():
         metrics.extend(exchange.calculate_latest_metrics(base_pair=base_pair, interval=config.interval, ma_periods=ma_periods))
-
+        """
+            metrics = [{
+                    'exchange': self.exchange_name,
+                    'market': market,
+                    'close': last_candle.close,
+                    'ma_period': min_ma_period,
+                    'ma': min_ma,
+                    'price_to_ma': min_price_to_ma
+                }, {...}, {...}]
+        """
 
     #------------------------------------------------------------------------------------
     # SELL any LongPositions?
@@ -166,8 +175,9 @@ if __name__ == '__main__':
         for exchange_name, exchange in exchanges.items():
             for crypto in AllTimeWatchlist.get_watchlist(exchange=exchange_name):
                 market = f"{crypto}{base_pair}"
+                metric = next(m for m in metrics if m['market'] ==  market)
                 current_price = Candle.get_last_candle(market, config.interval).close
-                current_ma_ratio = metrics[market]['price_to_ma']
+                current_ma_ratio = metric['price_to_ma']
                 positions_to_sell = []
                 sell_quantity = Decimal('0.0')
                 total_spent = Decimal('0.0')
