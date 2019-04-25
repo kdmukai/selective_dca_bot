@@ -199,40 +199,41 @@ if __name__ == '__main__':
                         )
                         continue
 
-                    result = exchange.market_sell(market, sell_quantity)
-                    print(result)
-                    """
-                        result = {
-                            "order_id": order_id,
-                            "price": sell_price,
-                            "quantity": total_qty,
-                            "fees": total_commission,
-                            "timestamp": timestamp
-                        }
-                    """
-                    for position in positions_to_sell:
-                        position.sell_quantity = position.buy_quantity
-                        position.sell_price = result['price']
-                        position.sell_timestamp = result['timestamp']
-                        position.save()
+                    if live_mode:
+                        result = exchange.market_sell(market, sell_quantity)
+                        print(result)
+                        """
+                            result = {
+                                "order_id": order_id,
+                                "price": sell_price,
+                                "quantity": total_qty,
+                                "fees": total_commission,
+                                "timestamp": timestamp
+                            }
+                        """
+                        for position in positions_to_sell:
+                            position.sell_quantity = position.buy_quantity
+                            position.sell_price = result['price']
+                            position.sell_timestamp = result['timestamp']
+                            position.save()
 
-                    profit = (sell_quantity * result['price']) - total_spent
-                    profit_percentage = ((sell_quantity * result['price']) / total_spent * Decimal('100.0')).quantize(Decimal('0.01'))
+                        profit = (sell_quantity * result['price']) - total_spent
+                        profit_percentage = ((sell_quantity * result['price']) / total_spent * Decimal('100.0')).quantize(Decimal('0.01'))
 
-                    # Send SNS message
-                    subject = f"SOLD {sell_quantity.normalize()} {crypto} for {profit:0.8f}{base_pair} ({profit_percentage}%)"
-                    print(subject)
-                    message = f"num_positions: {len(positions_to_sell)}\n"
-                    for position in positions_to_sell:
-                        profit = (position.buy_quantity * result['price']) - position.spent
-                        profit_percentage = ((position.buy_quantity * result['price']) / position.spent * Decimal('100.0')).quantize(Decimal('0.01'))
-                        message += f"{position.timestamp}: {profit:0.8f} | {profit_percentage:3.2f}%\n"
+                        # Send SNS message
+                        subject = f"SOLD {sell_quantity.normalize()} {crypto} for {profit:0.8f}{base_pair} ({profit_percentage}%)"
+                        print(subject)
+                        message = f"num_positions: {len(positions_to_sell)}\n"
+                        for position in positions_to_sell:
+                            profit = (position.buy_quantity * result['price']) - position.spent
+                            profit_percentage = ((position.buy_quantity * result['price']) / position.spent * Decimal('100.0')).quantize(Decimal('0.01'))
+                            message += f"{position.timestamp}: {profit:0.8f} | {profit_percentage:3.2f}%\n"
 
-                    sns.publish(
-                        TopicArn=sns_topic,
-                        Subject=subject,
-                        Message=message
-                    )
+                        sns.publish(
+                            TopicArn=sns_topic,
+                            Subject=subject,
+                            Message=message
+                        )
 
 
     #------------------------------------------------------------------------------------
