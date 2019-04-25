@@ -173,8 +173,6 @@ class BinanceExchange(AbstractExchange):
 
 
     def get_current_balance(self, asset='BTC'):
-        if config.is_test:
-            raise Exception("Test mode shouldn't end up here")
         return Decimal(self.client.get_asset_balance(asset=asset)["free"])
 
 

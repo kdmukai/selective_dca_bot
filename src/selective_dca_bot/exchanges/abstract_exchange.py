@@ -20,6 +20,11 @@ class AbstractExchange(ABC):
         pass
 
 
+    @abstractmethod
+    def get_current_balance(self, asset):
+        pass
+
+
     def calculate_latest_metrics(self, base_pair, interval, ma_periods):
         from ..models import Candle, AllTimeWatchlist
 

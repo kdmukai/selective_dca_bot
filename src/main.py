@@ -186,6 +186,19 @@ if __name__ == '__main__':
                 if sell_quantity > Decimal('0.0'):
                     print(f"SELL {sell_quantity.normalize()} {crypto}")
 
+                    # Check balance and make sure we can actually sell this much
+                    balance = exchange.get_current_balance(crypto)
+                    if sell_quantity > balance:
+                        subject = f"Insufficient balance"
+                        message = f"Can't sell {sell_quantity.normalize()}. Only {balance.normalize()} {crypto} held on {exchange.exchange_name}"
+                        print(message)
+                        sns.publish(
+                            TopicArn=sns_topic,
+                            Subject=subject,
+                            Message=message
+                        )
+                        continue
+
                     result = exchange.market_sell(market, sell_quantity)
                     print(result)
                     """
