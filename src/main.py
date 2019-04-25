@@ -176,9 +176,9 @@ if __name__ == '__main__':
                     #   - position is at or above profit_threshold
                     #   - OR if the current_ma_ratio is spiking and the position is at or
                     #       above the min_profit level
-                    if current_price / position.purchase_price >= profit_threshold or
+                    if (current_price / position.purchase_price >= profit_threshold or
                             (current_ma_ratio >= ma_ratio_profit_threshold and
-                             current_price / position.purchase_price >= min_profit):
+                             current_price / position.purchase_price >= min_profit)):
                         positions_to_sell.append(position)
                         sell_quantity += position.buy_quantity
                         total_spent += position.spent
