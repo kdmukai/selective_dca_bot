@@ -50,7 +50,7 @@ def current_profit():
     for result in sorted(results, key=lambda i: i['profit'], reverse=True):
         result_str += f"{'{:>8}'.format(result['market'])}: {'{:>11}'.format(str(result['profit']))} | {'{:>6}'.format(str(result['profit_percentage']))}% | {result['quantity']}\n"
 
-    result_str += f"{'-' * 31}\n"
+    result_str += f"{'-' * 40}\n"
     result_str += f"   total: {'{:>11}'.format(str(total_net))} | {'{:>6}'.format(str(total_percentage))}%\n"
 
     # print(result_str)

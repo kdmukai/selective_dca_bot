@@ -231,6 +231,18 @@ class LongPosition(BaseModel):
             return None
 
     @staticmethod
+    def get_last_positions(num, market=None):
+        if not market:
+            return LongPosition.select().order_by(LongPosition.timestamp.desc()).limit(num)
+        else:
+            return LongPosition.select(
+                ).where(
+                    LongPosition.market == market
+                ).order_by(
+                    LongPosition.timestamp.desc()
+                ).limit(num)
+
+    @staticmethod
     def get_num_positions(market=None, limit=None):
         if market:
             return LongPosition.select(
@@ -294,7 +306,6 @@ class LongPosition(BaseModel):
                 ).where(
                     LongPosition.sell_quantity is None
                 )
-
 
     @property
     def timestamp_str(self):

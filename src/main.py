@@ -86,6 +86,7 @@ if __name__ == '__main__':
     binance_secret = arg_config.get('API', 'BINANCE_SECRET')
 
     max_crypto_holdings_percentage = Decimal(arg_config.get('CONFIG', 'MAX_CRYPTO_HOLDINGS_PERCENTAGE'))
+    max_consecutive_buys = Decimal(arg_config.get('CONFIG', 'MAX_CONSECUTIVE_BUYS'))
     ma_ratio_profit_threshold = Decimal(arg_config.get('CONFIG', 'MA_RATIO_PROFIT_THRESHOLD'))
     min_profit = Decimal(arg_config.get('CONFIG', 'MIN_PROFIT'))
     profit_threshold = Decimal(arg_config.get('CONFIG', 'PROFIT_THRESHOLD'))
@@ -117,6 +118,14 @@ if __name__ == '__main__':
     watchlist = []
     binance_watchlist = [x.strip() for x in arg_config.get('WATCHLIST', 'BINANCE').split(',')]
     watchlist.extend(binance_watchlist)
+
+    do_not_sell_list = []
+    binance_do_not_sell_list = arg_config.get('DO_NOT_SELL_LIST', 'BINANCE', fallback=None)
+    if binance_do_not_sell_list:
+        binance_do_not_sell_list = [x.strip() for x in binance_do_not_sell_list.split(',')]
+        do_not_sell_list.extend(binance_do_not_sell_list)
+
+    print(do_not_sell_list)
 
     params = {
         # "num_buys": num_buys,
@@ -175,6 +184,9 @@ if __name__ == '__main__':
     if sells_enabled:
         for exchange_name, exchange in exchanges.items():
             for crypto in AllTimeWatchlist.get_watchlist(exchange=exchange_name):
+                if crypto in do_not_sell_list:
+                    continue
+
                 market = f"{crypto}{base_pair}"
                 metric = next(m for m in metrics if m['market'] ==  market)
                 current_price = Candle.get_last_candle(market, config.interval).close
@@ -252,7 +264,13 @@ if __name__ == '__main__':
     metrics_sorted = sorted(metrics, key = lambda i: i['price_to_ma'])
     ma_ratios = ""
     target_metric = None
+
+    # Don't allow too many consecutive buys
+    recent_positions = LongPosition.get_last_positions(max_consecutive_buys)
+    recent_markets = {p.market for p in recent_positions}
+
     for metric in metrics_sorted:
+        market = metric['market']
         crypto = metric['market'][:(-1 * len(base_pair))]
         if crypto not in watchlist:
             # This is a historical crypto being updated
@@ -261,7 +279,10 @@ if __name__ == '__main__':
         ma_ratios += f"{crypto}: price-to-MA: {metric['price_to_ma']:0.4f} | positions: {num_positions[crypto]}\n"
 
         # Our target crypto's metric will be the first one on this list that isn't overpositioned
-        if not target_metric and crypto not in over_positioned:
+        #   and hasn't had too many consecutive buys.
+        if (    not target_metric
+                and crypto not in over_positioned
+                and (market not in recent_markets or len(recent_markets) > 1)):
             target_metric = metric
     print(ma_ratios)
 
@@ -289,7 +310,7 @@ if __name__ == '__main__':
         print(f"Must increase quantized_qty: {quantized_qty} * {current_price} < {market_params.min_notional}")
         quantized_qty += market_params.lot_step_size
 
-    print(f"Buy: {quantized_qty:0.6f} {crypto} @ {current_price:0.8f} {base_pair}")
+    print(f"Buy: {quantized_qty.normalize()} {crypto} @ {current_price:0.8f} {base_pair}")
 
     if live_mode:
         results = exchange.buy(market, quantized_qty)
