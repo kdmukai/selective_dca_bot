@@ -276,6 +276,10 @@ if __name__ == '__main__':
 
     #------------------------------------------------------------------------------------
     #  BUY the next target based on the most favorable price_to_ma ratio
+    if buy_amount == Decimal('0.0'):
+        # We're done.
+        exit()
+
     metrics_sorted = sorted(metrics, key = lambda i: i['price_to_ma'])
     ma_ratios = ""
     target_metric = None
