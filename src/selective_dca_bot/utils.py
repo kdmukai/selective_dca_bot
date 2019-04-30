@@ -22,9 +22,12 @@ def current_profit():
                 Candle.timestamp.desc()
             ).limit(1)[0].close
 
-        (quantity, spent) = LongPosition.select(
+        (quantity, spent, min, avg, max) = LongPosition.select(
                 fn.SUM(LongPosition.buy_quantity),
-                fn.SUM(LongPosition.buy_quantity * LongPosition.purchase_price)
+                fn.SUM(LongPosition.buy_quantity * LongPosition.purchase_price),
+                fn.MIN(LongPosition.purchase_price),
+                fn.AVG(LongPosition.purchase_price),
+                fn.MAX(LongPosition.purchase_price)
             ).where(
                 LongPosition.market == market,
                 LongPosition.sell_quantity.is_null(True)
@@ -42,6 +45,9 @@ def current_profit():
 
         results.append({
             "market": market,
+            "min_position": min.quantize(Decimal('0.00000001')),
+            "avg_position": avg.quantize(Decimal('0.00000001')),
+            "max_position": max.quantize(Decimal('0.00000001')),
             "profit": profit,
             "profit_percentage": profit_percentage,
             "quantity": quantity.normalize()
@@ -49,7 +55,7 @@ def current_profit():
 
     total_percentage = (total_net / total_spent * Decimal('100.0')).quantize(Decimal('0.01'))
     for result in sorted(results, key=lambda i: i['profit'], reverse=True):
-        result_str += f"{'{:>8}'.format(result['market'])}: {'{:>11}'.format(str(result['profit']))} | {'{:>6}'.format(str(result['profit_percentage']))}% | {'{:f}'.format(result['quantity'])}\n"
+        result_str += f"{'{:>8}'.format(result['market'])}: {'{:>10}'.format(str(result['min_position']))} | {'{:>10}'.format(str(result['avg_position']))} | {'{:>10}'.format(str(result['max_position']))} | {'{:>6}'.format(str(result['profit_percentage']))}% | {'{:f}'.format(result['quantity'])}\n"
 
     result_str += f"{'-' * 40}\n"
     result_str += f"   total: {'{:>11}'.format(str(total_net))} | {'{:>6}'.format(str(total_percentage))}%\n"
