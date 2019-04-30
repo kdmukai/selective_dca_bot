@@ -240,7 +240,7 @@ if __name__ == '__main__':
                         """
                         total_sold = Decimal('0.0')
                         for position in positions_to_sell:
-                            position.sell_quantity = (position.spent / result['quantity']).quantize(market_params.lot_step_size)
+                            position.sell_quantity = (position.spent / result['price']).quantize(market_params.lot_step_size)
                             position.sell_price = result['price']
                             position.sell_timestamp = result['timestamp']
                             position.scalped_quantity = position.buy_quantity - position.sell_quantity
