@@ -141,12 +141,12 @@ if __name__ == '__main__':
     # UPDATE latest candles
     over_positioned = []
     num_positions = {}
-    total_positions = LongPosition.get_num_positions(limit=max(ma_periods))
+    total_positions = LongPosition.get_open_positions(limit=max(ma_periods)).count()
 
     # Are we too heavily weighted on a crypto on our watchlist over the last N periods?
     for crypto in watchlist:
         market = f"{crypto}{base_pair}"
-        num_positions[crypto] = LongPosition.get_num_positions(market, limit=max(ma_periods))
+        num_positions[crypto] = LongPosition.get_open_positions(market, limit=max(ma_periods)).count()
         if Decimal(num_positions[crypto] / total_positions) >= max_crypto_holdings_percentage:
             over_positioned.append(crypto)
 
@@ -275,6 +275,13 @@ if __name__ == '__main__':
                         )
 
 
+    if buy_amount == Decimal('0.0'):
+        # Report out status of current holdings, then we're done.
+        current_profit = utils.current_profit()
+        print(current_profit)
+        exit()
+
+
     #------------------------------------------------------------------------------------
     #  BUY the next target based on the most favorable price_to_ma ratio
     metrics_sorted = sorted(metrics, key = lambda i: i['price_to_ma'])
@@ -301,10 +308,6 @@ if __name__ == '__main__':
                 and (market not in recent_markets or len(recent_markets) > 1)):
             target_metric = metric
     print(ma_ratios)
-
-    if buy_amount == Decimal('0.0'):
-        # We're done.
-        exit()
 
     if not target_metric:
         # All of the cryptos failed the over positioned test?!
@@ -345,6 +348,7 @@ if __name__ == '__main__':
             watchlist=",".join(watchlist),
         )
 
+    # Report out status of updated holdings
     current_profit = utils.current_profit()
     print(current_profit)
 

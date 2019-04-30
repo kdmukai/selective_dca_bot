@@ -26,7 +26,8 @@ def current_profit():
                 fn.SUM(LongPosition.buy_quantity),
                 fn.SUM(LongPosition.buy_quantity * LongPosition.purchase_price)
             ).where(
-                LongPosition.market == market
+                LongPosition.market == market,
+                LongPosition.sell_quantity.is_null(True)
             ).scalar(as_tuple=True)
 
         quantity = Decimal(quantity).quantize(Decimal('0.00000001'))

@@ -17,7 +17,7 @@ The term sounds nefarious but it just means that when you take profits you only 
 
 _A future enhancement might add a scalped profit preservation threshold: if your scalped tokens drop to X% value, sell them off to lock in whatever profit is left before the price drops further._
 
-## Details
+## Selection Details
 The bot is given a watchlist of cryptos that it can select amongst. For each crypto on its watchlist it will grab the latest hourly candles and compute the 200-hr MA for each. The closing price of the most recently completed candle is then divided by the crypto's 200-hr MA:
 
 ```
@@ -60,6 +60,28 @@ This is where the art and expertise come in (of which I claim neither). First of
 The 200-hr MA seemed to strike the right balance of reaction speed vs stability. If the period is too long, the MA shows after-effects long after a move happened and won't capture the current realities of the market. If the period is too short, the MA will be too tightly tied to the day's volatility (a minor pullback amidst a bigger move could seem like a bigger deal than it actually is).
 
 Maybe an EMA would be better? Maybe 150 candles? To each his or her own.
+
+## Sell/Scalp config
+_The strategies here are somewhat experimental and in flux._
+
+To keep things simple, when I say _"sell*"_ here I always mean _"sell enough to get back the original investment and let the remainder ride as scalped 'free' tokens."_
+
+The `settings.conf` takes three pertinent parameters:
+```
+PROFIT_THRESHOLD = 1.10
+MA_RATIO_PROFIT_THRESHOLD = 1.07
+MIN_PROFIT = 1.04
+```
+
+`PROFIT_THRESHOLD`: Sell* any open position that exceeds this threshold.
+
+`MA_RATIO_PROFIT_THRESHOLD`: If the `price_to_ma` ratio we computed above rises above this specified threshold, trigger a sell* for any open positions for that particular crypto. This is an experimental tradeoff between the more ambitious `PROFIT_THRESHOLD` target vs capitalizing on sudden, unexpected smaller swings.
+
+`MIN_PROFIT`: The above `MA_RATIO_PROFIT_THRESHOLD` sell* logic will not be applied to any positions whose net profit is below this threshold. Just because the `price_to_ma` ratio is up for a particular crypto doesn't mean every open position for that crypto is actually profitable at the moment (e.g. it's a really good day after a brutal week).
+
+_It probably makes sense to only resort to the `MA_RATIO_PROFIT_THRESHOLD` sell* if a certain amount of time has elapsed on the open position (i.e. we've been stuck in crypto XYZ for weeks without hitting the `PROFIT_THRESHOLD` target; get us out, even at a smaller profit on the next mini-pump). A new param is likely called for to configure this lag time._
+
+
 
 ## Disclaimer
 _I built this to execute my own micro dollar cost-averaging crypto buys. Use and modify it at your own risk. This is also not investment advice. I am not an investment advisor. Always #DYOR - Do Your Own Research and invest in the way that best suits your needs and risk profile._
