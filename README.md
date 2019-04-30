@@ -77,7 +77,7 @@ MIN_PROFIT = 1.04
 
 `MA_RATIO_PROFIT_THRESHOLD`: If the `price_to_ma` ratio we computed above rises above this specified threshold, trigger a sell* for any open positions for that particular crypto. This is an experimental tradeoff between the more ambitious `PROFIT_THRESHOLD` target vs capitalizing on sudden, unexpected smaller swings.
 
-`MIN_PROFIT`: The above `MA_RATIO_PROFIT_THRESHOLD` sell* logic will not be applied to any positions whose net profit is below this threshold. Just because the `price_to_ma` ratio is up for a particular crypto doesn't mean every open position for that crypto is actually profitable at the moment (e.g. it's a really good day after a brutal week).
+`MIN_PROFIT`: The above `MA_RATIO_PROFIT_THRESHOLD` sell* logic will not be applied to any positions whose net profit is below this threshold. Just because the `price_to_ma` ratio is up for a particular crypto doesn't mean every open position for that crypto is actually profitable at the moment (e.g. a really good day after a brutal week).
 
 _It probably makes sense to only resort to the `MA_RATIO_PROFIT_THRESHOLD` sell* if a certain amount of time has elapsed on the open position (i.e. we've been stuck in crypto XYZ for weeks without hitting the `PROFIT_THRESHOLD` target; get us out, even at a smaller profit on the next mini-pump). A new param is likely called for to configure this lag time._
 

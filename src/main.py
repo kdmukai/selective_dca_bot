@@ -143,10 +143,10 @@ if __name__ == '__main__':
     num_positions = {}
     total_positions = LongPosition.get_open_positions(limit=max(ma_periods)).count()
 
-    # Are we too heavily weighted on a crypto on our watchlist over the last N periods?
+    # Are we too heavily weighted on a crypto on our watchlist?
     for crypto in watchlist:
         market = f"{crypto}{base_pair}"
-        num_positions[crypto] = LongPosition.get_open_positions(market, limit=max(ma_periods)).count()
+        num_positions[crypto] = LongPosition.get_open_positions(market).count()
         if Decimal(num_positions[crypto] / total_positions) >= max_crypto_holdings_percentage:
             over_positioned.append(crypto)
 
