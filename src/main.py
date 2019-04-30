@@ -266,7 +266,7 @@ if __name__ == '__main__':
                         for position in positions_to_sell:
                             profit = (position.buy_quantity * result['price']) - position.spent
                             profit_percentage = ((position.buy_quantity * result['price']) / position.spent * Decimal('100.0')).quantize(Decimal('0.01'))
-                            message += f"{position.timestamp}: {profit:0.8f} | {profit_percentage:3.2f}%\n"
+                            message += f"{position.timestamp_str}: {profit:0.8f} | {profit_percentage:3.2f}%\n"
 
                         sns.publish(
                             TopicArn=sns_topic,
