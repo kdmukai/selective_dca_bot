@@ -141,7 +141,7 @@ if __name__ == '__main__':
     # UPDATE latest candles
     over_positioned = []
     num_positions = {}
-    total_positions = LongPosition.get_open_positions(limit=max(ma_periods)).count()
+    total_positions = LongPosition.get_open_positions().count()
 
     # Are we too heavily weighted on a crypto on our watchlist?
     for crypto in watchlist:
