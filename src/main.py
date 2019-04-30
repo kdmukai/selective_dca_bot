@@ -239,6 +239,7 @@ if __name__ == '__main__':
                             }
                         """
                         total_sold = Decimal('0.0')
+                        total_scalped = Decimal('0.0')
                         for position in positions_to_sell:
                             position.sell_quantity = (position.spent / result['price']).quantize(market_params.lot_step_size)
                             position.sell_price = result['price']
@@ -247,6 +248,7 @@ if __name__ == '__main__':
                             position.save()
 
                             total_sold += position.sell_quantity
+                            total_scalped += position.scalped_quantity
 
                         if total_sold != result['quantity']:
                             # Fix up the last position to match reality
@@ -255,11 +257,10 @@ if __name__ == '__main__':
                             position.scalped_quantity = position.buy_quantity - position.sell_quantity
                             position.save()
 
-                        profit = (total_sold * result['price']) - total_spent
-                        profit_percentage = ((total_sold * result['price']) / total_spent * Decimal('100.0')).quantize(Decimal('0.01'))
+                        profit = total_scalped * result['price']
 
                         # Send SNS message
-                        subject = f"SOLD {total_sold.normalize()} {crypto} for {profit:0.8f}{base_pair} ({profit_percentage}%)"
+                        subject = f"SOLD {total_sold.normalize()} {crypto} | scalped {total_scalped} {crypto} ({profit:0.8f} {base_pair})"
                         print(subject)
                         message = f"num_positions: {len(positions_to_sell)}\n"
                         for position in positions_to_sell:
@@ -276,10 +277,6 @@ if __name__ == '__main__':
 
     #------------------------------------------------------------------------------------
     #  BUY the next target based on the most favorable price_to_ma ratio
-    if buy_amount == Decimal('0.0'):
-        # We're done.
-        exit()
-
     metrics_sorted = sorted(metrics, key = lambda i: i['price_to_ma'])
     ma_ratios = ""
     target_metric = None
@@ -304,6 +301,10 @@ if __name__ == '__main__':
                 and (market not in recent_markets or len(recent_markets) > 1)):
             target_metric = metric
     print(ma_ratios)
+
+    if buy_amount == Decimal('0.0'):
+        # We're done.
+        exit()
 
     if not target_metric:
         # All of the cryptos failed the over positioned test?!
