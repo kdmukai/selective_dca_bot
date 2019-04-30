@@ -13,7 +13,7 @@ While I love the simplicity of DCA, you do end up buying into inopportune random
 _Big caveat: if the opportunity metric used isn't great, SelectiveDCA will, of course, make bad decisions._
 
 ## Scalping
-The term sounds nefarious but it just means that when you take profits you only sell off enough to recoup your initial investment. You then hold the remainder as "scalped" tokens to ride to higher profits (or crash to zero). It's a way to delay profit-taking to keep even greater upside potential on the table but with zero risk to your initial capital.
+The term sounds nefarious but it just means that when you take profits you only sell off enough to recoup your initial investment. You then hold the remainder as "scalped" tokens to ride to higher profits (or crash to zero). It's a way to delay profit-taking to keep even greater upside potential on the table but with zero risk to your initial capital. Think of it as borrowing some of your base currency (typically BTC) in order to generate free tokens in some crypto XYZ.
 
 _A future enhancement might add a scalped profit preservation threshold: if your scalped tokens drop to X% value, sell them off to lock in whatever profit is left before the price drops further._
 

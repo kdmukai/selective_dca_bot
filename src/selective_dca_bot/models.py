@@ -300,12 +300,12 @@ class LongPosition(BaseModel):
             return LongPosition.select(
                 ).where(
                     LongPosition.market == market,
-                    LongPosition.sell_quantity is None
+                    LongPosition.sell_quantity.is_null(True)
                 )
         else:
             return LongPosition.select(
                 ).where(
-                    LongPosition.sell_quantity is None
+                    LongPosition.sell_quantity.is_null(True)
                 )
 
     @property

@@ -125,8 +125,6 @@ if __name__ == '__main__':
         binance_do_not_sell_list = [x.strip() for x in binance_do_not_sell_list.split(',')]
         do_not_sell_list.extend(binance_do_not_sell_list)
 
-    print(do_not_sell_list)
-
     params = {
         # "num_buys": num_buys,
     }
@@ -195,6 +193,7 @@ if __name__ == '__main__':
                 positions_to_sell = []
                 sell_quantity = Decimal('0.0')
                 total_spent = Decimal('0.0')
+                market_params = MarketParams.get_market(market)
                 for position in LongPosition.get_open_positions(market):
                     # SELL if:
                     #   - position is at or above profit_threshold
@@ -204,12 +203,14 @@ if __name__ == '__main__':
                             (current_ma_ratio >= ma_ratio_profit_threshold and
                              current_price / position.purchase_price >= min_profit)):
                         positions_to_sell.append(position)
+                        print(f"Sell: {crypto} | {position.purchase_price} | {position.buy_quantity} | {(current_price / position.purchase_price * Decimal('100.0')).quantize(Decimal('0.01'))}%")
 
                         # Sell enough to recover initial investment
-                        sell_quantity += position.spent / current_price
+                        sell_quantity += (position.spent / current_price).quantize(market_params.lot_step_size)
                         total_spent += position.spent
 
                 if sell_quantity > Decimal('0.0'):
+                    sell_quantity = sell_quantity.quantize(market_params.lot_step_size)
                     print(f"SELL {sell_quantity.normalize()} {crypto}")
 
                     # Check balance and make sure we can actually sell this much
@@ -237,18 +238,28 @@ if __name__ == '__main__':
                                 "timestamp": timestamp
                             }
                         """
+                        total_sold = Decimal('0.0')
                         for position in positions_to_sell:
-                            position.sell_quantity = result['quantity']
+                            position.sell_quantity = (position.spent / result['quantity']).quantize(market_params.lot_step_size)
                             position.sell_price = result['price']
                             position.sell_timestamp = result['timestamp']
                             position.scalped_quantity = position.buy_quantity - position.sell_quantity
                             position.save()
 
-                        profit = (sell_quantity * result['price']) - total_spent
-                        profit_percentage = ((sell_quantity * result['price']) / total_spent * Decimal('100.0')).quantize(Decimal('0.01'))
+                            total_sold += position.sell_quantity
+
+                        if total_sold != result['quantity']:
+                            # Fix up the last position to match reality
+                            position = positions_to_sell[-1]
+                            position.sell_quantity -= total_sold - result['quantity']
+                            position.scalped_quantity = position.buy_quantity - position.sell_quantity
+                            position.save()
+
+                        profit = (total_sold * result['price']) - total_spent
+                        profit_percentage = ((total_sold * result['price']) / total_spent * Decimal('100.0')).quantize(Decimal('0.01'))
 
                         # Send SNS message
-                        subject = f"SOLD {sell_quantity.normalize()} {crypto} for {profit:0.8f}{base_pair} ({profit_percentage}%)"
+                        subject = f"SOLD {total_sold.normalize()} {crypto} for {profit:0.8f}{base_pair} ({profit_percentage}%)"
                         print(subject)
                         message = f"num_positions: {len(positions_to_sell)}\n"
                         for position in positions_to_sell:
@@ -329,9 +340,10 @@ if __name__ == '__main__':
             watchlist=",".join(watchlist),
         )
 
-        current_profit = utils.current_profit()
-        print(current_profit)
+    current_profit = utils.current_profit()
+    print(current_profit)
 
+    if live_mode:
         # Send SNS message
         subject = f"Bought {'{:f}'.format(results['quantity'].normalize())} {crypto} ({price_to_ma*Decimal('100.0'):0.2f}% of {ma_period}-hr MA)"
         print(subject)
