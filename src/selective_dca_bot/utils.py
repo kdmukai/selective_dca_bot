@@ -48,7 +48,7 @@ def current_profit():
 
     total_percentage = (total_net / total_spent * Decimal('100.0')).quantize(Decimal('0.01'))
     for result in sorted(results, key=lambda i: i['profit'], reverse=True):
-        result_str += f"{'{:>8}'.format(result['market'])}: {'{:>11}'.format(str(result['profit']))} | {'{:>6}'.format(str(result['profit_percentage']))}% | {result['quantity']}\n"
+        result_str += f"{'{:>8}'.format(result['market'])}: {'{:>11}'.format(str(result['profit']))} | {'{:>6}'.format(str(result['profit_percentage']))}% | {'{:f}'.format(result['quantity'])}\n"
 
     result_str += f"{'-' * 40}\n"
     result_str += f"   total: {'{:>11}'.format(str(total_net))} | {'{:>6}'.format(str(total_percentage))}%\n"

@@ -208,9 +208,10 @@ class LongPosition(BaseModel):
     fees = DecimalField()
     timestamp = DateTimeField()
     watchlist = CharField()
-    sell_quantity = DecimalField()
-    sell_price = DecimalField()
-    sell_timestamp = DateTimeField()
+    sell_quantity = DecimalField(null=True)
+    sell_price = DecimalField(null=True)
+    sell_timestamp = DateTimeField(null=True)
+    scalped_quantity = DecimalField(null=True)
 
     def __str__(self):
         return f"{self.id}: {self.market} {time.ctime(self.timestamp)}"

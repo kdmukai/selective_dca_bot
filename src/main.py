@@ -181,6 +181,7 @@ if __name__ == '__main__':
 
     #------------------------------------------------------------------------------------
     # SELL any LongPositions?
+    # Will recover the initial investment and let the profits ride as scalped tokens.
     if sells_enabled:
         for exchange_name, exchange in exchanges.items():
             for crypto in AllTimeWatchlist.get_watchlist(exchange=exchange_name):
@@ -203,7 +204,9 @@ if __name__ == '__main__':
                             (current_ma_ratio >= ma_ratio_profit_threshold and
                              current_price / position.purchase_price >= min_profit)):
                         positions_to_sell.append(position)
-                        sell_quantity += position.buy_quantity
+
+                        # Sell enough to recover initial investment
+                        sell_quantity += position.spent / current_price
                         total_spent += position.spent
 
                 if sell_quantity > Decimal('0.0'):
@@ -235,9 +238,10 @@ if __name__ == '__main__':
                             }
                         """
                         for position in positions_to_sell:
-                            position.sell_quantity = position.buy_quantity
+                            position.sell_quantity = result['quantity']
                             position.sell_price = result['price']
                             position.sell_timestamp = result['timestamp']
+                            position.scalped_quantity = position.buy_quantity - position.sell_quantity
                             position.save()
 
                         profit = (sell_quantity * result['price']) - total_spent
@@ -329,7 +333,7 @@ if __name__ == '__main__':
         print(current_profit)
 
         # Send SNS message
-        subject = f"Bought {results['quantity'].normalize()} {crypto} ({price_to_ma*Decimal('100.0'):0.2f}% of {ma_period}-hr MA)"
+        subject = f"Bought {'{:f}'.format(results['quantity'].normalize())} {crypto} ({price_to_ma*Decimal('100.0'):0.2f}% of {ma_period}-hr MA)"
         print(subject)
         message = ma_ratios
         message += "\n\n" + current_profit

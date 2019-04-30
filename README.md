@@ -1,5 +1,5 @@
-# SelectiveDCA Bot
-A Dollar Cost Averaging (DCA) bot that does regular buys but opportunistically selects _which_ crypto to buy by comparing market conditions for all the assets in its user-set watchlist.
+# SelectiveDCA Scalping Bot
+A Dollar Cost Averaging (DCA) bot that does regular buys but opportunistically selects _which_ crypto to buy by comparing market conditions for all the assets in its user-set watchlist. At an optional profit threshold the bot will sell its positions to recover the initial investment and let the remaining "scalped" tokens ride.
 
 ![LRC chart](imgs/lrc_chart.png)
 _DCA = Buy every X hours; SelectiveDCA = Buy the crypto furthest below its 200-hr MA every X hours_
@@ -11,6 +11,11 @@ The Dollar Cost Averaging investment philosophy is the easiest "set it and forge
 While I love the simplicity of DCA, you do end up buying into inopportune random spikes like LRC's "here today, gone tomorrow" pump in the image above. In the long run the "Averaging" part of DCA will smooth the spikes and valleys out, but I was curious to see if there might be room for some slight improvements by employing a tiny bit more intelligence to the buying process. In short: don't buy into a spike. SelectiveDCA will still buy in on a regular schedule, but it has the flexibility to spend its money on what it thinks is the best opportunity at the moment.
 
 _Big caveat: if the opportunity metric used isn't great, SelectiveDCA will, of course, make bad decisions._
+
+## Scalping
+The term sounds nefarious but it just means that when you take profits you only sell off enough to recoup your initial investment. You then hold the remainder as "scalped" tokens to ride to higher profits (or crash to zero). It's a way to delay profit-taking to keep even greater upside potential on the table but with zero risk to your initial capital.
+
+_A future enhancement might add a scalped profit preservation threshold: if your scalped tokens drop to X% value, sell them off to lock in whatever profit is left before the price drops further._
 
 ## Details
 The bot is given a watchlist of cryptos that it can select amongst. For each crypto on its watchlist it will grab the latest hourly candles and compute the 200-hr MA for each. The closing price of the most recently completed candle is then divided by the crypto's 200-hr MA:
