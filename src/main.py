@@ -191,7 +191,6 @@ if __name__ == '__main__':
                 market = f"{crypto}{base_pair}"
                 metric = next(m for m in metrics if m['market'] ==  market)
                 current_price = Candle.get_last_candle(market, config.interval).close
-                print(f"{crypto}: current price: {current_price} {base_pair}")
                 current_ma_ratio = metric['price_to_ma']
                 positions_to_sell = []
                 sell_quantity = Decimal('0.0')
