@@ -208,6 +208,7 @@ class LongPosition(BaseModel):
     fees = DecimalField()
     timestamp = DateTimeField()
     watchlist = CharField()
+    sell_order_id = IntegerField(null=True)
     sell_quantity = DecimalField(null=True)
     sell_price = DecimalField(null=True)
     sell_timestamp = DateTimeField(null=True)

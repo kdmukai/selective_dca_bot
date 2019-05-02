@@ -21,6 +21,11 @@ class AbstractExchange(ABC):
 
 
     @abstractmethod
+    def limit_sell(self, market, quantity, bid_price):
+        pass
+
+
+    @abstractmethod
     def get_current_balance(self, asset):
         pass
 

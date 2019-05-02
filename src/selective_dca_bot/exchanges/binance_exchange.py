@@ -337,6 +337,40 @@ class BinanceExchange(AbstractExchange):
             raise Exception("Unhandled case!")
 
 
+    def limit_sell(self, market, quantity, bid_price):
+        # Round prices to conform to price_tick_size for this market
+        market_params = MarketParams.get_market(market)
+        quantized_qty = quantity.quantize(market_params.lot_step_size)
+        bid_price = bid_price.quantize(market_params.price_tick_size)
+
+        try:
+            response = self.client.order_limit_sell(
+                symbol=market,
+                quantity=quantized_qty,
+                price=bid_price,
+                newOrderRespType=Client.ORDER_RESP_TYPE_FULL    # Need the full details to get 'commission' (aka fees).
+            )
+        except Exception as e:
+            error_msg = (f"LIMIT SELL ORDER: {market}" +
+                         f" | quantized_qty: {quantized_qty}\n" +
+                         f"{e}")
+            cprint(error_msg, "red")
+
+            # TODO: Email error notifications?
+            raise e
+
+        print(f"LIMIT SELL ORDER: {response}")
+
+        order_id = response["orderId"]
+        timestamp = response["transactTime"] / 1000
+
+        return {
+            "order_id": order_id,
+            "price": bid_price,
+            "quantity": quantized_qty
+        }
+
+
     def set_stop_loss(self, market, quantity, stop_loss_price):
         limit_price = stop_loss_price * config.params["stop_loss_limit_percentage"]
 
@@ -346,56 +380,47 @@ class BinanceExchange(AbstractExchange):
         # Round the quantity to one less decimal place than specified
         #   e.g. lot_step_size = '0.001' but round 0.123 to 0.12
         #   see: https://redd.it/7ej5cn
-        exp = market_params.lot_step_size
-        if market_params.lot_step_size < Decimal('1.0'):
-            exp = Decimal(10.0) ** Decimal(market_params.lot_step_size.as_tuple().exponent + 1)
-        quantized_qty = quantity.quantize(exp, rounding=decimal.ROUND_DOWN)
+        quantized_qty = quantity.quantize(market_params.lot_step_size)
 
         # Same for the price
-        exp = Decimal(10.0) ** Decimal(market_params.price_tick_size.as_tuple().exponent + 1)
-        stop_loss_price = stop_loss_price.quantize(exp)
-        limit_price = limit_price.quantize(exp)
+        stop_loss_price = stop_loss_price.quantize(market_params.price_tick_size)
+        limit_price = limit_price.quantize(market_params.price_tick_size)
 
-        if config.is_test:
-            order_id = 1
-            timestamp = config.historical_timestamp
+        try:
+            response = self.client.create_order(
+                symbol=market,
+                quantity=quantized_qty,
+                price=limit_price,
+                stopPrice=stop_loss_price,
+                type=Client.ORDER_TYPE_STOP_LOSS_LIMIT,
+                side=Client.SIDE_SELL,
+                timeInForce=Client.TIME_IN_FORCE_GTC,
+                newOrderRespType=Client.ORDER_RESP_TYPE_FULL
+            )
+        except binance.exceptions.BinanceAPIException as e:
+            error_msg = (f"STOP LOSS LIMIT ORDER: {market}" +
+                         f" | quantity: {quantity}" +
+                         f" | quantized_qty: {quantized_qty}" +
+                         f" | price: {limit_price}" +
+                         f" | stopPrice: {stop_loss_price}\n" +
+                         f"{e}")
+            cprint(error_msg, "red")
+            return {"error_code": e.code}
 
-        else:
-            try:
-                response = self.client.create_order(
-                    symbol=market,
-                    quantity=quantized_qty,
-                    price=limit_price,
-                    stopPrice=stop_loss_price,
-                    type=Client.ORDER_TYPE_STOP_LOSS_LIMIT,
-                    side=Client.SIDE_SELL,
-                    timeInForce=Client.TIME_IN_FORCE_GTC,
-                    newOrderRespType=Client.ORDER_RESP_TYPE_FULL
-                )
-            except binance.exceptions.BinanceAPIException as e:
-                error_msg = (f"STOP LOSS LIMIT ORDER: {market}" +
-                             f" | quantity: {quantity}" +
-                             f" | quantized_qty: {quantized_qty}" +
-                             f" | price: {limit_price}" +
-                             f" | stopPrice: {stop_loss_price}\n" +
-                             f"{e}")
-                cprint(error_msg, "red")
-                return {"error_code": e.code}
+        except Exception as e:
+            error_msg = (f"STOP LOSS LIMIT ORDER: {market}" +
+                         f" | quantity: {quantity}" +
+                         f" | quantized_qty: {quantized_qty}" +
+                         f" | price: {limit_price}" +
+                         f" | stopPrice: {stop_loss_price}\n" +
+                         f"{e}")
+            cprint(error_msg, "red")
 
-            except Exception as e:
-                error_msg = (f"STOP LOSS LIMIT ORDER: {market}" +
-                             f" | quantity: {quantity}" +
-                             f" | quantized_qty: {quantized_qty}" +
-                             f" | price: {limit_price}" +
-                             f" | stopPrice: {stop_loss_price}\n" +
-                             f"{e}")
-                cprint(error_msg, "red")
+            # TODO: Handle binance.exceptions.BinanceAPIException: APIError(code=-2010): Order would trigger immediately.
+            #   Immediately submit it as a market sell order instead?
 
-                # TODO: Handle binance.exceptions.BinanceAPIException: APIError(code=-2010): Order would trigger immediately.
-                #   Immediately submit it as a market sell order instead?
-
-                # TODO: Email error notifications?
-                raise e
+            # TODO: Email error notifications?
+            raise e
 
             order_id = response["orderId"]
             timestamp = response["transactTime"] / 1000

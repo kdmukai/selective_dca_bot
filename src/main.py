@@ -353,7 +353,7 @@ if __name__ == '__main__':
     if live_mode:
         results = exchange.buy(market, quantized_qty)
 
-        LongPosition.create(
+        position = LongPosition.create(
             market=market,
             buy_order_id=results['order_id'],
             buy_quantity=results['quantity'],
@@ -362,6 +362,29 @@ if __name__ == '__main__':
             timestamp=results['timestamp'],
             watchlist=",".join(watchlist),
         )
+
+        # Immediately place a LIMIT SELL order for this position at the target profit level
+        target_price = (current_price * profit_threshold).quantize(market_params.price_tick_size)
+        sell_quantity = (position.spent / target_price).quantize(market_params.lot_step_size)
+
+        if sell_quantity >= position.buy_quantity:
+            # The lot_step_size is large (e.g. LTC's 0.01) so there's no way to take a profit
+            #   slice this small. Have to wait for a bigger jump in order to achieve a scalp.
+            sell_quantity = (sell_quantity - market_params.lot_step_size).quantize(market_params.lot_step_size)
+            target_price = (position.spent / sell_quantity).quantize(market_params.price_tick_size)
+
+            print(f"Had to revise target_price up to {target_price} to preserve {(position.buy_quantity - sell_quantity)} scalp")
+
+        results = exchange.limit_sell(market, sell_quantity, target_price)
+        """
+            {
+                "order_id": order_id,
+                "price": bid_price,
+                "quantity": quantized_qty
+            }
+        """
+        position.sell_order_id = results['order_id']
+        position.save()
 
     # Report out status of updated holdings
     current_positions = utils.open_positions_report()
