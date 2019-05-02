@@ -7,7 +7,7 @@ from .models import LongPosition, Candle, AllTimeWatchlist
 from .exchanges import EXCHANGE__BINANCE
 
 
-def current_profit():
+def open_positions_report():
     markets = [lp.market for lp in LongPosition.select(LongPosition.market).distinct()]
 
     results = []
@@ -55,15 +55,65 @@ def current_profit():
 
     total_percentage = (total_net / total_spent * Decimal('100.0')).quantize(Decimal('0.01'))
     for result in sorted(results, key=lambda i: i['profit'], reverse=True):
-        result_str += f"{'{:>8}'.format(result['market'])}: {'{:>10}'.format(str(result['min_position']))} | {'{:>10}'.format(str(result['avg_position']))} | {'{:>10}'.format(str(result['max_position']))} | {'{:>6}'.format(str(result['profit_percentage']))}% | {'{:>7f}'.format(result['quantity'])}\n"
+        result_str += f"{'{:>8}'.format(result['market'])}: {'{:>10}'.format(str(result['min_position']))} | {'{:>10}'.format(str(result['max_position']))} | {'{:>6}'.format(str(result['profit_percentage']))}% | {'{:>7f}'.format(result['quantity'])}\n"
 
     result_str += f"{'-' * 40}\n"
     result_str += f"   total: {'{:>11}'.format(str(total_net))} | {'{:>6}'.format(str(total_percentage))}%\n"
 
-    # print(result_str)
-
     return result_str
 
+
+def scalped_positions_report():
+    markets = [lp.market for lp in LongPosition.select(
+                    LongPosition.market
+                ).where(
+                    LongPosition.scalped_quantity.is_null(False)
+                ).distinct()]
+
+    results = []
+    result_str = ""
+    total_net = Decimal('0.0')
+    total_spent = Decimal('0.0')
+    for market in markets:
+        current_price = Candle.select(
+            ).where(
+                Candle.market == market
+            ).order_by(
+                Candle.timestamp.desc()
+            ).limit(1)[0].close
+
+        (spent, quantity_scalped) = LongPosition.select(
+                fn.SUM(LongPosition.buy_quantity * LongPosition.purchase_price),
+                fn.SUM(LongPosition.scalped_quantity)
+            ).where(
+                LongPosition.market == market,
+                LongPosition.scalped_quantity.is_null(False)
+            ).scalar(as_tuple=True)
+
+        quantity = Decimal(quantity_scalped).quantize(Decimal('0.00000001'))
+        spent = Decimal(spent).quantize(Decimal('0.00000001'))
+
+        current_value = (quantity * current_price).quantize(Decimal('0.00000001'))
+
+        total_net += current_value
+        total_spent += spent
+
+        results.append({
+            "market": market,
+            "spent": spent,
+            "current_value": current_value,
+            "quantity": quantity.normalize()
+        })
+
+    total_net = total_net.quantize(Decimal('0.00000001'))
+    total_spent = total_spent.quantize(Decimal('0.00000001'))
+    for result in sorted(results, key=lambda i: i['current_value'], reverse=True):
+        result_str += f"{'{:>8}'.format(result['market'])}: risked {'{:>10}'.format(str(result['spent']))} | current_value {'{:>10}'.format(str(result['current_value']))} | {'{:>7f}'.format(result['quantity'])}\n"
+
+    result_str += f"{'-' * 40}\n"
+    result_str += f"   total: risked {'{:>11}'.format(str(total_spent))} | current_value {'{:>10}'.format(str(total_net))}\n"
+
+    return result_str
 
 
 def generate_performance_report(base_pair='BTC',
@@ -112,6 +162,4 @@ def generate_performance_report(base_pair='BTC',
     print(f"min | median | max: {test_runs[0]:0.08f} | {median_profit:0.08f} | {test_runs[test_iterations - 1]:0.08f}")
 
     print(current_profit())
-
-
 

@@ -68,6 +68,8 @@ def get_timestamp():
 
 
 if __name__ == '__main__':
+    print(f"{'*' * 90}")
+    print(f"* {get_timestamp()}")
     args = parser.parse_args()
     buy_amount = args.buy_amount
     base_pair = args.base_pair
@@ -189,10 +191,12 @@ if __name__ == '__main__':
                 market = f"{crypto}{base_pair}"
                 metric = next(m for m in metrics if m['market'] ==  market)
                 current_price = Candle.get_last_candle(market, config.interval).close
+                print(f"{crypto}: current price: {current_price} {base_pair}")
                 current_ma_ratio = metric['price_to_ma']
                 positions_to_sell = []
                 sell_quantity = Decimal('0.0')
                 total_spent = Decimal('0.0')
+                positions_quantity = Decimal('0.0')
                 market_params = MarketParams.get_market(market)
                 for position in LongPosition.get_open_positions(market):
                     # SELL if:
@@ -206,12 +210,21 @@ if __name__ == '__main__':
                         print(f"Sell: {crypto} | {position.purchase_price} | {position.buy_quantity} | {(current_price / position.purchase_price * Decimal('100.0')).quantize(Decimal('0.01'))}%")
 
                         # Sell enough to recover initial investment
-                        sell_quantity += (position.spent / current_price).quantize(market_params.lot_step_size)
+                        positions_quantity += position.buy_quantity
+                        sell_quantity += (position.spent / current_price)
                         total_spent += position.spent
+
 
                 if sell_quantity > Decimal('0.0'):
                     sell_quantity = sell_quantity.quantize(market_params.lot_step_size)
-                    print(f"SELL {sell_quantity.normalize()} {crypto}")
+                    positions_quantity = positions_quantity.quantize(market_params.lot_step_size)
+                    if sell_quantity == positions_quantity:
+                        # Can't do the sell now. Due to lot_step_size we'll end up selling the entire
+                        #   position with no scalp to retain.
+                        print(f"Aborting sell. Would have to sell the entire position(s) with no scalp left over!")
+                        continue
+
+                    print(f"SELL {'{:>6f}'.format(sell_quantity.normalize())} {crypto}")
 
                     # Check balance and make sure we can actually sell this much
                     balance = exchange.get_current_balance(crypto)
@@ -277,8 +290,11 @@ if __name__ == '__main__':
 
     if buy_amount == Decimal('0.0'):
         # Report out status of current holdings, then we're done.
-        current_profit = utils.current_profit()
-        print(current_profit)
+        current_positions = utils.open_positions_report()
+        print(current_positions)
+
+        scalped_positions = utils.scalped_positions_report()
+        print(scalped_positions)
         exit()
 
 
@@ -349,15 +365,19 @@ if __name__ == '__main__':
         )
 
     # Report out status of updated holdings
-    current_profit = utils.current_profit()
-    print(current_profit)
+    current_positions = utils.open_positions_report()
+    print(current_positions)
+
+    scalped_positions = utils.scalped_positions_report()
+    print(scalped_positions)
 
     if live_mode:
         # Send SNS message
         subject = f"Bought {'{:f}'.format(results['quantity'].normalize())} {crypto} ({price_to_ma*Decimal('100.0'):0.2f}% of {ma_period}-hr MA)"
         print(subject)
         message = ma_ratios
-        message += "\n\n" + current_profit
+        message += "\n\n" + current_positions
+        message += "\n\n" + scalped_positions
 
         sns.publish(
             TopicArn=sns_topic,
