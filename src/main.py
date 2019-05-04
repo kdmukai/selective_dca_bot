@@ -4,7 +4,7 @@ import configparser
 import datetime
 import time
 
-from decimal import Decimal
+from decimal import Decimal, ROUND_UP
 from datetime import timedelta
 
 from selective_dca_bot import config, utils
@@ -348,7 +348,7 @@ if __name__ == '__main__':
         print(f"Must increase quantized_qty: {quantized_qty} * {current_price} < {market_params.min_notional}")
         quantized_qty += market_params.lot_step_size
 
-    print(f"Buy: {quantized_qty.normalize()} {crypto} @ {current_price:0.8f} {base_pair}")
+    print(f"Buy: {quantized_qty.normalize()} {crypto} @ {current_price:0.8f} {base_pair}\n")
 
     if live_mode:
         results = exchange.buy(market, quantized_qty)
@@ -364,14 +364,17 @@ if __name__ == '__main__':
         )
 
         # Immediately place a LIMIT SELL order for this position at the target profit level
-        target_price = (current_price * profit_threshold).quantize(market_params.price_tick_size)
-        sell_quantity = (position.spent / target_price).quantize(market_params.lot_step_size)
+        target_price = (position.purchase_price * profit_threshold).quantize(market_params.price_tick_size, rounding=ROUND_UP)
+
+        # Must ROUND_UP to make sure we cover our initial investment
+        sell_quantity = (position.spent / target_price).quantize(market_params.lot_step_size, rounding=ROUND_UP)
 
         if sell_quantity >= position.buy_quantity:
             # The lot_step_size is large (e.g. LTC's 0.01) so there's no way to take a profit
-            #   slice this small. Have to wait for a bigger jump in order to achieve a scalp.
-            sell_quantity = (sell_quantity - market_params.lot_step_size).quantize(market_params.lot_step_size)
-            target_price = (position.spent / sell_quantity).quantize(market_params.price_tick_size)
+            #   slice this small. Have to target a bigger price jump in order to achieve a scalp.
+            #   Resulting scalp quantity will equal the lot_step_size minimum.
+            sell_quantity = (position.buy_quantity - market_params.lot_step_size).quantize(market_params.lot_step_size)
+            target_price = (position.spent / sell_quantity).quantize(market_params.price_tick_size, rounding=ROUND_UP)
 
             print(f"Had to revise target_price up to {target_price} to preserve {(position.buy_quantity - sell_quantity)} scalp")
 
@@ -383,6 +386,7 @@ if __name__ == '__main__':
                 "quantity": quantized_qty
             }
         """
+        print(f"LIMIT SELL ORDER: {results}\n")
         position.sell_order_id = results['order_id']
         position.save()
 
@@ -406,4 +410,5 @@ if __name__ == '__main__':
             Subject=subject,
             Message=message
         )
+
 

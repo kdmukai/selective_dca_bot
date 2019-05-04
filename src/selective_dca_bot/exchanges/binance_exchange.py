@@ -1,5 +1,6 @@
 import binance
 import decimal
+import json
 import random
 import time
 
@@ -234,7 +235,7 @@ class BinanceExchange(AbstractExchange):
             raise e
 
         if config.verbose:
-            print(f"BUY ORDER: {buy_order_response}")
+            print(f"BUY ORDER: {json.dumps(buy_order_response, sort_keys=True, indent=4)}")
 
         order_id = buy_order_response["orderId"]
         timestamp = buy_order_response["transactTime"] / 1000
@@ -359,7 +360,8 @@ class BinanceExchange(AbstractExchange):
             # TODO: Email error notifications?
             raise e
 
-        print(f"LIMIT SELL ORDER: {response}")
+        if config.verbose:
+            print(f"LIMIT SELL ORDER: {json.dumps(response, sort_keys=True, indent=4)}")
 
         order_id = response["orderId"]
         timestamp = response["transactTime"] / 1000
@@ -647,6 +649,7 @@ class BinanceExchange(AbstractExchange):
             ma += (Decimal(candle[4]) + Decimal(candle[1])) / Decimal('2.0')
 
         return ma / Decimal(len(self.candles))
+
 
 
 
