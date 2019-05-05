@@ -1,8 +1,8 @@
 # SelectiveDCA Scalping Bot
-A Dollar Cost Averaging (DCA) bot that does regular buys but opportunistically selects _which_ crypto to buy by comparing market conditions for all the assets in its user-set watchlist. At an optional profit threshold the bot will sell its positions to recover the initial investment and let the remaining "scalped" tokens ride.
+A Dollar Cost Averaging (DCA) bot that does regular buys but opportunistically selects _which_ crypto to buy by comparing market conditions for all the assets in its user-set watchlist. At a specified profit threshold the bot will liquidate enough of a position to recover the initial investment and let the remaining "scalped" tokens ride.
 
 ![LRC chart](imgs/lrc_chart.png)
-_DCA = Buy every X hours; SelectiveDCA = Buy the crypto furthest below its 200-hr MA every X hours_
+_DCA = Buy on a sched no matter what; SelectiveDCA = Bias toward the cryptos furthest below their 200-hr MA_
 
 
 ## Overview
@@ -29,10 +29,7 @@ for crypto in watchlist:
     price_to_ma = last_candle.close / ma_200hr
 ```
 
-The resulting `price_to_ma` will determine our sense of how good or poor an investment opportunity it is at the moment. Low `price_to_ma` values mean that the current price is below the trend from the last 9 days. High `price_to_ma` values mean its on an uptrend. 
-
-The crypto with the lowest `price_to_ma` will be the target for this round's DCA buy.
-
+The resulting `price_to_ma` will determine our sense of how good or poor an investment opportunity it is at the moment. 
 ```
     LRC: close: 0.00001464 BTC | 200-hr MA: 0.00001621 | price-to-MA: 0.9034
     ICX: close: 0.00007160 BTC | 200-hr MA: 0.00007646 | price-to-MA: 0.9365
@@ -49,6 +46,19 @@ The crypto with the lowest `price_to_ma` will be the target for this round's DCA
     BNB: close: 0.00374330 BTC | 200-hr MA: 0.00358123 | price-to-MA: 1.0453
 ```
 
+`price_to_ma` values below 1.0 mean that the current price is below the trend from the last 9 days. Currently only cryptos that are below their trendline are considered. If it was a big green candle day where every crypto on the watchlist was above its trendline, the bot would decline to make any buys.
+
+### Heavily weighted randomized lottery selection
+The bot takes the `price_to_ma` values that are below 1.0 and weights each crypto based on how far below their trendline they are. A cubed distance function is used so that the weights grow exponentially for lower `price_to_ma` values. These weights are then used to bias a lottery selection process where one crypto is selected from amongst the buy candidates. 
+
+#### Why use a lottery?
+First, the crypto with the lowest `price_to_ma` ratio is still the most likely to be selected, which is the overriding idea we're going for in this bot.
+
+But what if two cryptos are both in nearly equally bad shape? Why should the bot keep buying just the lowest one at, say a `price_to_ma` of 0.8830, when its suffering compatriot is at 0.8835? They should really be nearly equally likely to be purchased by the bot which is what the weighted lottery selection allows for.
+
+Finally, a little randomization is a good thing. The weighted randomized selection method was inspired by the NBA draft lottery; even the best team in the league has a non-zero chance of landing the first pick in the draft, but the worst team is still favored with the best odds. We have to be realistic and accept that the bot's selection metric (`price_to_ma` ratio) will never yield the 100% best possible pick. So instead we leave the final selection up to opinionated chance. Set up what we think makes the most sense, then trust in a little dumb luck.
+
+
 ## Philosophy
 The core assumption here is that it's better to buy on the downtrends than when an asset is getting hot. Remember that we're starting from a hand-picked watchlist of cryptos; you should believe in the medium- to longer-term future of each crypto that you put on this list. That longer-term faith is what makes buying on the downtrends a reasonable play. 
 
@@ -64,23 +74,27 @@ Maybe an EMA would be better? Maybe 150 candles? To each his or her own.
 ## Sell/Scalp config
 _The strategies here are somewhat experimental and in flux._
 
-To keep things simple, when I say _"sell*"_ here I always mean _"sell enough to get back the original investment and let the remainder ride as scalped 'free' tokens."_
+When the bot makes a buy it will also immediately place a LIMIT SELL order at the `PROFIT_THRESHOLD` you specify in your `settings.conf`. This way you're guaranteed to successfully exit your position whenever the price pumps back up and without having to have the bot constantly monitoring price action. This has the added benefit of making it clearer which tokens on the exchange are being managed by the bot, as they'll be tied up as "In order" tokens in your exchange balances.
 
-The `settings.conf` takes three pertinent parameters:
-```
-PROFIT_THRESHOLD = 1.10
-MA_RATIO_PROFIT_THRESHOLD = 1.07
-MIN_PROFIT = 1.04
-```
+_It might make sense to have a secondary, lower profit threshold if a certain amount of time has elapsed on the open position (i.e. we've been stuck in crypto XYZ for weeks without hitting the `PROFIT_THRESHOLD` target; just get us out asap, even at a smaller profit--or even break even or a slight loss if we're really desperate--on the next mini-pump)._
 
-`PROFIT_THRESHOLD`: Sell* any open position that exceeds this threshold.
+Also note that the LIMIT SELL is set _for each individual position_ the bot takes. So 10 positions for the same crypto could all have different target sell prices. This mirrors the DCA philosophy where now our sell targets are as spread out as our buys are. On a good day some of your positions in crypto XYZ will hit their limit price and exit while other positions won't. There are no monolithic all-or-nothing moves here. Opportunistic nibbles in, opportunistic nibbles out.
 
-`MA_RATIO_PROFIT_THRESHOLD`: If the `price_to_ma` ratio we computed above rises above this specified threshold, trigger a sell* for any open positions for that particular crypto. This is an experimental tradeoff between the more ambitious `PROFIT_THRESHOLD` target vs capitalizing on sudden, unexpected smaller swings.
 
-`MIN_PROFIT`: The above `MA_RATIO_PROFIT_THRESHOLD` sell* logic will not be applied to any positions whose net profit is below this threshold. Just because the `price_to_ma` ratio is up for a particular crypto doesn't mean every open position for that crypto is actually profitable at the moment (e.g. a really good day after a brutal week).
+### Profit threshold strategy
+There will always be a tradeoff between constantly capitalizing on smaller moves up and down vs trying to catch some of crypto's famous violent big swings. 
 
-_It probably makes sense to only resort to the `MA_RATIO_PROFIT_THRESHOLD` sell* if a certain amount of time has elapsed on the open position (i.e. we've been stuck in crypto XYZ for weeks without hitting the `PROFIT_THRESHOLD` target; get us out, even at a smaller profit on the next mini-pump). A new param is likely called for to configure this lag time._
+My current strategy is to keep `PROFIT_THRESHOLD` very modest: 1.05 (aka 5%). I'm hoping most of my positions can hit this target within days or no more than a few short weeks. Playing this kind of small ball would of course be frustrating on a huge green day; your crypto jumps 30% but the bot cashed out its positions in the first 5%. That's life. I'm fine with missing out.
 
+And remember that my small cache of scalped tokens that the bot will retain will ride on to that 30% gain and beyond. It's not the biggest win possible, but still a win.
+
+But why play so conservatively? Well, realistically, those giant moves don't happen as often as it seems. But small moves -- 3-5% losses and gains -- seem to happen every week, if not nearly every day. If you can keep nibbling away, capturing 3-5% scalps and recouping your initial risk capital, over and over and over that will add up over time. Yes, the big, meaty bites are amazing, but maybe 1000 mice can find more scraps of food than the lion that infrequently lands a gazelle. While you're waiting for a +20% home run, a smaller 3-5% setting might have already yielded you more than that by playing the many up-down cycles that occurred on the way up to that +20% price.
+
+This also banks on the idea that chart movements aren't straight lines. The overall trend might be up or down (choose your watchlist wisely!) but there's lots of noise along the way. Profit on the bumpy ride that lives within the trend.
+
+There's also greater risk to your initial capital the higher you set the `PROFIT_THRESHOLD`. More of your funds will be tied up as the bot waits to hit a harder, less likely target.
+
+Play safe(ish) small ball with your risk capital. In the long run you'll profit enough from your scalped tokens while seeing more of your risk capital returned safely home. Or so I think.
 
 
 ## Disclaimer

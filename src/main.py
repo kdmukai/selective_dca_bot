@@ -287,7 +287,7 @@ if __name__ == '__main__':
     lottery_markets = []
     lottery_weights = []
     for candidate in buy_candidates:
-        print(f"candidate: {candidate['market']} | {candidate['entries']} entries")
+        print(f"candidate: {candidate['market']} | {int(candidate['entries']):4d} entries")
         lottery_markets.append(candidate['market'])
         lottery_weights.append(float(candidate['entries'] / total_entries))
 
