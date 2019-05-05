@@ -201,6 +201,7 @@ class Candle(BaseModel):
 
 
 class LongPosition(BaseModel):
+    exchange = CharField()
     market = CharField()
     buy_order_id = IntegerField()
     buy_quantity = DecimalField()

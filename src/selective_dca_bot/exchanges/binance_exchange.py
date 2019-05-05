@@ -464,26 +464,13 @@ class BinanceExchange(AbstractExchange):
             )
 
 
-    def get_stop_loss_order_status(self, position):
-        if config.is_test:
-            # Have to simulate if a stop-loss was triggered at the current historical_timestamp
-            candle = Candle.get_historical_candle(position.market, config.interval, config.historical_timestamp)
+    def get_sell_order_status(self, position):
+        try:
+            if not position.sell_order_id:
+                # Can't look for nothing
+                raise Exception(f"Position {position} has no sell_order_id")
 
-            if candle and position.stop_loss_price >= candle.low:
-                return {
-                    "status": "FILLED",
-                    "sell_price": position.stop_loss_price,
-                    "quantity": position.sell_quantity,
-                    "fees": (position.sell_quantity * position.stop_loss_price * Decimal('0.0005')).quantize(Decimal('0.00000001'), rounding=decimal.ROUND_DOWN),
-                    "timestamp": candle.timestamp
-                }
-            else:
-                return {
-                    "status": "OPEN",
-                    "timestamp": candle.timestamp
-                }
-
-        else:
+            response = self.client.get_order(symbol=position.market, orderId=position.sell_order_id)
             """
                 {
                     'symbol': 'BNBBTC',
@@ -502,42 +489,36 @@ class BinanceExchange(AbstractExchange):
                     'isWorking': True
                 }
             """
-            try:
-                if not position.sell_order_id:
-                    # Can't look for nothing
-                    raise Exception(f"Position {position} has no sell_order_id")
+        except Exception as e:
+            print(f"GET SELL ORDER STATUS:" +
+                  f" | symbol: {position.market}" +
+                  f" | orderId: {position.sell_order_id}" +
+                  f"\n{e}")
+            raise e
 
-                response = self.client.get_order(symbol=position.market, orderId=position.sell_order_id)
-            except Exception as e:
-                print(f"GET STOP-LOSS ORDER STATUS:" +
-                      f" | symbol: {position.market}" +
-                      f" | orderId: {position.sell_order_id}" +
-                      f"\n{e}")
-                raise e
+        if response["status"] == 'FILLED':
+            # print(f"ORDER STATUS: FILLED: {response}")
 
-            if response["status"] == 'FILLED':
-                print(f"ORDER STATUS: FILLED: {response}")
+            price = Decimal(response["stopPrice"]) if Decimal(response["stopPrice"]) != Decimal('0.0') else Decimal(response["price"])
+            quantity = Decimal(response["executedQty"])
 
-                price = Decimal(response["stopPrice"]) if "stopPrice" in response else Decimal(response["price"])
-                quantity = Decimal(response["executedQty"])
+            # TODO: How to get the 'commission' fees?
 
-                # TODO: How to get the 'commission' fees?
+            # Calculating unofficial fees for now
+            # fees = self._calculate_fees(price, quantity)
 
-                # Calculating unofficial fees for now
-                fees = self._calculate_fees(price, quantity)
-
-                # Sell order is done!
-                return {
-                    "status": response["status"],
-                    "sell_price": price,
-                    "quantity": quantity,
-                    "fees": fees,
-                    "timestamp": response["time"] / 1000,
-                }
-            else:
-                return {
-                    "status": response["status"]
-                }
+            # Sell order is done!
+            return {
+                "status": response["status"],
+                "sell_price": price,
+                "quantity": quantity,
+                # "fees": fees,
+                "timestamp": response["time"] / 1000,
+            }
+        else:
+            return {
+                "status": response["status"]
+            }
 
 
     def get_buy_order_status(self, position):

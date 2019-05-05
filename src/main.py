@@ -49,11 +49,11 @@ parser.add_argument('-l', '--live',
                     dest="live_mode",
                     help="""Submit live orders. When omitted runs in simulation mode""")
 
-parser.add_argument('-s', '--sells-enabled',
+parser.add_argument('-u', '--update_order_status',
                     action='store_true',
                     default=False,
-                    dest="sells_enabled",
-                    help="""Sell off previously purchased positions if they've reached the profit threshold""")
+                    dest="update_order_status",
+                    help="""Checks limit sell orders' statuses""")
 
 parser.add_argument('-r', '--performance_report',
                     action='store_true',
@@ -74,7 +74,7 @@ if __name__ == '__main__':
     buy_amount = args.buy_amount
     base_pair = args.base_pair
     live_mode = args.live_mode
-    sells_enabled = args.sells_enabled
+    update_order_status = args.update_order_status
     config.is_test = not live_mode
     performance_report = args.performance_report
     # num_buys = args.num_buys
@@ -141,17 +141,6 @@ if __name__ == '__main__':
 
     #------------------------------------------------------------------------------------
     # UPDATE latest candles
-    over_positioned = []
-    num_positions = {}
-    total_positions = LongPosition.get_open_positions().count()
-
-    # Are we too heavily weighted on a crypto on our watchlist?
-    for crypto in watchlist:
-        market = f"{crypto}{base_pair}"
-        num_positions[crypto] = LongPosition.get_open_positions(market).count()
-        if Decimal(num_positions[crypto] / total_positions) >= max_crypto_holdings_percentage:
-            over_positioned.append(crypto)
-
     exchanges_data = []
     if EXCHANGE__BINANCE in exchange_list:
         exchanges_data.append(
@@ -180,111 +169,50 @@ if __name__ == '__main__':
 
 
     #------------------------------------------------------------------------------------
-    # SELL any LongPositions?
-    # Will recover the initial investment and let the profits ride as scalped tokens.
-    if sells_enabled:
+    #  Update the status of open LongPositions
+    if update_order_status:
+        recently_sold = ""
+        positions_sold = []
         for exchange_name, exchange in exchanges.items():
-            for crypto in AllTimeWatchlist.get_watchlist(exchange=exchange_name):
-                if crypto in do_not_sell_list:
-                    continue
+            positions = LongPosition.select(
+                    ).where(
+                        LongPosition.sell_quantity.is_null(True),
+                        LongPosition.exchange == exchange_name
+                    ).order_by(
+                        LongPosition.market,
+                        LongPosition.id
+                    )
+            for position in positions:
+                result = exchange.get_sell_order_status(position)
+                """
+                    {
+                        "status": NEW, etc,
+                        "sell_price": price,
+                        "quantity": quantity,
+                        # "fees": fees,
+                        "timestamp": ,
+                    }
+                """
+                if result['status'] == 'FILLED':
+                    position.sell_price = result['sell_price']
+                    position.sell_quantity = result['quantity']
+                    position.sell_timestamp = result['timestamp']
+                    position.scalped_quantity = position.buy_quantity - position.sell_quantity
+                    position.save()
 
-                market = f"{crypto}{base_pair}"
-                metric = next(m for m in metrics if m['market'] ==  market)
-                current_price = Candle.get_last_candle(market, config.interval).close
-                current_ma_ratio = metric['price_to_ma']
-                positions_to_sell = []
-                sell_quantity = Decimal('0.0')
-                total_spent = Decimal('0.0')
-                positions_quantity = Decimal('0.0')
-                market_params = MarketParams.get_market(market)
-                for position in LongPosition.get_open_positions(market):
-                    # SELL if:
-                    #   - position is at or above profit_threshold
-                    #   - OR if the current_ma_ratio is spiking and the position is at or
-                    #       above the min_profit level
-                    if (current_price / position.purchase_price >= profit_threshold or
-                            (current_ma_ratio >= ma_ratio_profit_threshold and
-                             current_price / position.purchase_price >= min_profit)):
-                        positions_to_sell.append(position)
-                        print(f"Sell: {crypto} | {position.purchase_price} | {position.buy_quantity} | {(current_price / position.purchase_price * Decimal('100.0')).quantize(Decimal('0.01'))}%")
+                    positions_sold.append(position)
+                    recently_sold += f"{position.market}: sold {'{:f}'.format(position.sell_quantity.normalize())} | recouped {'{:f}'.format((position.sell_quantity * position.sell_price).quantize(Decimal('0.00000001')))} {base_pair} | scalped {'{:f}'.format(position.scalped_quantity.normalize())}\n"
 
-                        # Sell enough to recover initial investment
-                        positions_quantity += position.buy_quantity
-                        sell_quantity += (position.spent / current_price)
-                        total_spent += position.spent
-
-
-                if sell_quantity > Decimal('0.0'):
-                    sell_quantity = sell_quantity.quantize(market_params.lot_step_size)
-                    positions_quantity = positions_quantity.quantize(market_params.lot_step_size)
-                    if sell_quantity == positions_quantity:
-                        # Can't do the sell now. Due to lot_step_size we'll end up selling the entire
-                        #   position with no scalp to retain.
-                        print(f"Aborting sell. Would have to sell the entire position(s) with no scalp left over!")
-                        continue
-
-                    print(f"SELL {'{:>6f}'.format(sell_quantity.normalize())} {crypto}")
-
-                    # Check balance and make sure we can actually sell this much
-                    balance = exchange.get_current_balance(crypto)
-                    if sell_quantity > balance:
-                        subject = f"Insufficient balance"
-                        message = f"Can't sell {sell_quantity.normalize()}. Only {balance.normalize()} {crypto} held on {exchange.exchange_name}"
-                        print(message)
-                        sns.publish(
-                            TopicArn=sns_topic,
-                            Subject=subject,
-                            Message=message
-                        )
-                        continue
-
-                    if live_mode:
-                        result = exchange.market_sell(market, sell_quantity)
-                        print(result)
-                        """
-                            result = {
-                                "order_id": order_id,
-                                "price": sell_price,
-                                "quantity": total_qty,
-                                "fees": total_commission,
-                                "timestamp": timestamp
-                            }
-                        """
-                        total_sold = Decimal('0.0')
-                        total_scalped = Decimal('0.0')
-                        for position in positions_to_sell:
-                            position.sell_quantity = (position.spent / result['price']).quantize(market_params.lot_step_size)
-                            position.sell_price = result['price']
-                            position.sell_timestamp = result['timestamp']
-                            position.scalped_quantity = position.buy_quantity - position.sell_quantity
-                            position.save()
-
-                            total_sold += position.sell_quantity
-                            total_scalped += position.scalped_quantity
-
-                        if total_sold != result['quantity']:
-                            # Fix up the last position to match reality
-                            position = positions_to_sell[-1]
-                            position.sell_quantity -= total_sold - result['quantity']
-                            position.scalped_quantity = position.buy_quantity - position.sell_quantity
-                            position.save()
-
-                        profit = total_scalped * result['price']
-
-                        # Send SNS message
-                        subject = f"SOLD {total_sold.normalize()} {crypto} | scalped {total_scalped} {crypto} ({profit:0.8f} {base_pair})"
-                        print(subject)
-                        message = f"num_positions: {len(positions_to_sell)}\n"
-                        for position in positions_to_sell:
-                            profit = (position.buy_quantity * result['price']) - position.spent
-                            profit_percentage = ((position.buy_quantity * result['price']) / position.spent * Decimal('100.0')).quantize(Decimal('0.01'))
-                            message += f"{position.timestamp_str}: {profit:0.8f} | {profit_percentage:3.2f}%\n"
-
-                        sns.publish(
-                            TopicArn=sns_topic,
-                            Subject=subject,
-                            Message=message
-                        )
+        if live_mode and len(positions_sold) > 0:
+            subject = f"SOLD {len(positions_sold)} positions"
+            print(recently_sold)
+            message = recently_sold
+            sns.publish(
+                TopicArn=sns_topic,
+                Subject=subject,
+                Message=message
+            )
+            exit()
 
 
     if buy_amount == Decimal('0.0'):
@@ -292,8 +220,11 @@ if __name__ == '__main__':
         current_positions = utils.open_positions_report()
         print(current_positions)
 
+        if update_order_status:
+            print("\n" + recently_sold)
+
         scalped_positions = utils.scalped_positions_report()
-        print(scalped_positions)
+        print("\n" + scalped_positions)
         exit()
 
 
@@ -306,6 +237,16 @@ if __name__ == '__main__':
     # Don't allow too many consecutive buys
     recent_positions = LongPosition.get_last_positions(max_consecutive_buys)
     recent_markets = {p.market for p in recent_positions}
+
+    # Are we too heavily weighted on a crypto on our watchlist?
+    over_positioned = []
+    num_positions = {}
+    total_positions = LongPosition.get_open_positions().count()
+    for crypto in watchlist:
+        market = f"{crypto}{base_pair}"
+        num_positions[crypto] = LongPosition.get_open_positions(market).count()
+        if Decimal(num_positions[crypto] / total_positions) >= max_crypto_holdings_percentage:
+            over_positioned.append(crypto)
 
     for metric in metrics_sorted:
         market = metric['market']
@@ -341,19 +282,20 @@ if __name__ == '__main__':
     quantity = buy_amount / current_price
 
     market_params = MarketParams.get_market(market)
-    quantized_qty = quantity.quantize(market_params.lot_step_size)
+    quantized_buy_qty = quantity.quantize(market_params.lot_step_size)
 
-    if quantized_qty * current_price < market_params.min_notional:
+    if quantized_buy_qty * current_price < market_params.min_notional:
         # Final order size isn't big enough
-        print(f"Must increase quantized_qty: {quantized_qty} * {current_price} < {market_params.min_notional}")
-        quantized_qty += market_params.lot_step_size
+        print(f"Must increase quantized_buy_qty: {quantized_buy_qty} * {current_price} < {market_params.min_notional}")
+        quantized_buy_qty += market_params.lot_step_size
 
-    print(f"Buy: {quantized_qty.normalize()} {crypto} @ {current_price:0.8f} {base_pair}\n")
+    print(f"Buy: {quantized_buy_qty.normalize()} {crypto} @ {current_price:0.8f} {base_pair}\n")
 
     if live_mode:
-        results = exchange.buy(market, quantized_qty)
+        results = exchange.buy(market, quantized_buy_qty)
 
         position = LongPosition.create(
+            exchange=exchange_name,
             market=market,
             buy_order_id=results['order_id'],
             buy_quantity=results['quantity'],
@@ -395,11 +337,11 @@ if __name__ == '__main__':
     print(current_positions)
 
     scalped_positions = utils.scalped_positions_report()
-    print(scalped_positions)
+    print("\n" + scalped_positions)
 
     if live_mode:
         # Send SNS message
-        subject = f"Bought {'{:f}'.format(results['quantity'].normalize())} {crypto} ({price_to_ma*Decimal('100.0'):0.2f}% of {ma_period}-hr MA)"
+        subject = f"Bought {'{:f}'.format(quantized_buy_qty)} {crypto} ({price_to_ma*Decimal('100.0'):0.2f}% of {ma_period}-hr MA)"
         print(subject)
         message = ma_ratios
         message += "\n\n" + current_positions
