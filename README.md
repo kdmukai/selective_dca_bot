@@ -58,6 +58,14 @@ But what if two cryptos are both in nearly equally bad shape? Why should the bot
 
 Finally, a little randomization is a good thing. The weighted randomized selection method was inspired by the NBA draft lottery; even the best team in the league has a non-zero chance of landing the first pick in the draft, but the worst team is still favored with the best odds. We have to be realistic and accept that the bot's selection metric (`price_to_ma` ratio) will never yield the 100% best possible pick. So instead we leave the final selection up to opinionated chance. Set up what we think makes the most sense, then trust in a little dumb luck.
 
+### Overpositioned cryptos and consecutive buy limits
+Two additional settings affect the selection lottery logic:
+
+`MAX_CRYPTO_HOLDINGS_PERCENTAGE = 0.25`: No single crypto may make up more than X% of the total open positions. Any such cryptos will be excluded from the selection lottery. At some point it becomes too risky to keep buying into a crypto that is the total dog of the group. Set this according to your "enough is enough" risk tolerance.
+
+`MAX_CONSECUTIVE_BUYS = 3`: If the selection lottery's randomization fails us, break up a crypto's buy streak and exclude it from the selection lottery.
+
+
 
 ## Philosophy
 The core assumption here is that it's better to buy on the downtrends than when an asset is getting hot. Remember that we're starting from a hand-picked watchlist of cryptos; you should believe in the medium- to longer-term future of each crypto that you put on this list. That longer-term faith is what makes buying on the downtrends a reasonable play. 

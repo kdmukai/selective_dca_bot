@@ -316,7 +316,7 @@ if __name__ == '__main__':
         print(f"Must increase quantized_buy_qty: {quantized_buy_qty} * {current_price} < {market_params.min_notional}")
         quantized_buy_qty += market_params.lot_step_size
 
-    print(f"Buy: {quantized_buy_qty.normalize()} {crypto} @ {current_price:0.8f} {base_pair}\n")
+    print(f"Buy: {'{:f}'.format(quantized_buy_qty.normalize())} {crypto} @ {current_price:0.8f} {base_pair}\n")
 
     if live_mode:
         results = exchange.buy(market, quantized_buy_qty)
