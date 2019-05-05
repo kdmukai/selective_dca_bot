@@ -521,6 +521,63 @@ class BinanceExchange(AbstractExchange):
             }
 
 
+    def update_order_statuses(self, market, positions):
+        """
+            Batch update open positions by market.
+        """
+        first_open_position = positions[0]
+
+        print(f"Retrieving order statuses for {market}")
+        orders = self.client.get_all_orders(
+            symbol=first_open_position.market,
+            orderId=first_open_position.sell_order_id
+        )
+        """
+            [{
+                "symbol": "ONTBTC",
+                "orderId": 95353124,
+                "clientOrderId": "O3Ji1FvNiYt6rr9NvGEtC4",
+                "price": "0.00020880",
+                "origQty": "4.91000000",
+                "executedQty": "0.00000000",
+                "cummulativeQuoteQty": "0.00000000",
+                "status": "NEW",
+                "timeInForce": "GTC",
+                "type": "LIMIT",
+                "side": "SELL",
+                "stopPrice": "0.00000000",
+                "icebergQty": "0.00000000",
+                "time": 1556814586405,
+                "updateTime": 1556814586405,
+                "isWorking": true
+            }, {...}, {...}]
+        """
+        positions_sold = []
+        for position in positions:
+            result = next((r for r in orders if r['orderId'] == position.sell_order_id), None)
+
+            if not result:
+                raise Exception(f"orderId {position.sell_order_id} not found for position {position.id}: {market}")
+
+            if result['status'] == 'NEW':
+                # Nothing to do. Still waiting for LIMIT SELL.
+                continue
+
+            elif result['status'] == 'FILLED':
+                position.sell_price = Decimal(result['price'])
+                position.sell_quantity = result['executedQty']
+                position.sell_timestamp = result['updateTime']/1000
+                position.scalped_quantity = position.buy_quantity - position.sell_quantity
+                position.save()
+
+                positions_sold.append(position)
+
+            else:
+                raise Exception(f"Unimplemented order status: '{result['status']}'")
+
+        return positions_sold
+
+
     def get_buy_order_status(self, position):
         if config.is_test:
             # Have to simulate if the buy order would have filled at the current historical_timestamp

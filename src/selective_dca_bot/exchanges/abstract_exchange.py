@@ -34,6 +34,9 @@ class AbstractExchange(ABC):
     def get_sell_order_status(self, position):
         pass
 
+    @abstractmethod
+    def update_order_statuses(self, market, positions):
+        pass
 
     def calculate_latest_metrics(self, base_pair, interval, ma_periods):
         from ..models import Candle, AllTimeWatchlist

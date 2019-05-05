@@ -173,39 +173,33 @@ if __name__ == '__main__':
     #  Update the status of open LongPositions
     if update_order_status:
         recently_sold = ""
-        positions_sold = []
+        num_positions_sold = 0
         for exchange_name, exchange in exchanges.items():
-            positions = LongPosition.select(
-                    ).where(
-                        LongPosition.sell_quantity.is_null(True),
-                        LongPosition.exchange == exchange_name
-                    ).order_by(
-                        LongPosition.market,
-                        LongPosition.id
-                    )
-            for position in positions:
-                result = exchange.get_sell_order_status(position)
-                """
-                    {
-                        "status": NEW, etc,
-                        "sell_price": price,
-                        "quantity": quantity,
-                        # "fees": fees,
-                        "timestamp": ,
-                    }
-                """
-                if result['status'] == 'FILLED':
-                    position.sell_price = result['sell_price']
-                    position.sell_quantity = result['quantity']
-                    position.sell_timestamp = result['timestamp']
-                    position.scalped_quantity = position.buy_quantity - position.sell_quantity
-                    position.save()
+            markets = [lp.market for lp in LongPosition.select(
+                    LongPosition.market
+                ).where(
+                    LongPosition.exchange == exchange_name,
+                    LongPosition.scalped_quantity.is_null(True)
+                ).distinct()]
 
-                    positions_sold.append(position)
-                    recently_sold += f"{position.market}: sold {'{:f}'.format(position.sell_quantity.normalize())} | recouped {'{:f}'.format((position.sell_quantity * position.sell_price).quantize(Decimal('0.00000001')))} {base_pair} | scalped {'{:f}'.format(position.scalped_quantity.normalize())}\n"
+            for market in markets:
+                positions = LongPosition.select(
+                        ).where(
+                            LongPosition.exchange == exchange_name,
+                            LongPosition.market == market,
+                            LongPosition.sell_quantity.is_null(True),
+                        ).order_by(
+                            LongPosition.sell_order_id
+                        )
 
-        if live_mode and len(positions_sold) > 0:
-            subject = f"SOLD {len(positions_sold)} positions"
+                positions_sold = exchange.update_order_statuses(market, positions)
+
+            for position in positions_sold:
+                num_positions_sold += 1
+                recently_sold += f"{position.market}: sold {'{:f}'.format(position.sell_quantity.normalize())} | recouped {'{:f}'.format((position.sell_quantity * position.sell_price).quantize(Decimal('0.00000001')))} {base_pair} | scalped {'{:f}'.format(position.scalped_quantity.normalize())}\n"
+
+        if live_mode and num_positions_sold > 0:
+            subject = f"SOLD {num_positions_sold} positions"
             print(recently_sold)
             message = recently_sold
             sns.publish(
