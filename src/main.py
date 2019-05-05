@@ -2,6 +2,7 @@ import argparse
 import boto3
 import configparser
 import datetime
+import random
 import time
 
 from decimal import Decimal, ROUND_UP
@@ -230,9 +231,6 @@ if __name__ == '__main__':
 
     #------------------------------------------------------------------------------------
     #  BUY the next target based on the most favorable price_to_ma ratio
-    metrics_sorted = sorted(metrics, key = lambda i: i['price_to_ma'])
-    ma_ratios = ""
-    target_metric = None
 
     # Don't allow too many consecutive buys
     recent_positions = LongPosition.get_last_positions(max_consecutive_buys)
@@ -248,26 +246,55 @@ if __name__ == '__main__':
         if Decimal(num_positions[crypto] / total_positions) >= max_crypto_holdings_percentage:
             over_positioned.append(crypto)
 
-    for metric in metrics_sorted:
+    ma_ratios = ""
+    buy_candidates = []
+    total_entries = Decimal('0')
+    for metric in sorted(metrics, key = lambda i: i['price_to_ma']):
         market = metric['market']
         crypto = metric['market'][:(-1 * len(base_pair))]
         if crypto not in watchlist:
             # This is a historical crypto being updated
             continue
 
-        ma_ratios += f"{crypto}: price-to-MA: {metric['price_to_ma']:0.4f} | positions: {num_positions[crypto]}\n"
+        price_to_ma = metric['price_to_ma']
+        ma_ratios += f"{crypto}: price-to-MA: {price_to_ma:0.4f} | positions: {num_positions[crypto]}\n"
 
-        # Our target crypto's metric will be the first one on this list that isn't overpositioned
-        #   and hasn't had too many consecutive buys.
-        if (    not target_metric
-                and crypto not in over_positioned
-                and (market not in recent_markets or len(recent_markets) > 1)):
-            target_metric = metric
+        # Consider any crypto that isn't overpositioned, hasn't had too many consecutive
+        #   buys, and whose price-to-MA is below 1.0.
+        #   Calculate a number of entries for a lottery selection process, based on
+        #   price-to-MA.
+        if (crypto not in over_positioned
+                and (market not in recent_markets or len(recent_markets) > 1)
+                and price_to_ma < Decimal('1.0')):
+            # Use a cubed distance function to more heavily weight the lower price-to-MAs
+            entries = (((Decimal('1.0') / price_to_ma * Decimal('100.0')) - Decimal('100.0')) ** Decimal('3')).quantize(Decimal('1'))
+            total_entries += entries
+
+            buy_candidates.append({
+                'market': market,
+                'price_to_ma': price_to_ma,
+                'entries': entries
+            })
     print(ma_ratios)
 
-    if not target_metric:
-        # All of the cryptos failed the over positioned test?!
-        target_metric = metrics_sorted[0]
+    if len(buy_candidates) == 0:
+        # They're all overpositioned or their price-to-MA is pumping!
+        print(f"No buy candidates found.")
+        exit()
+
+    # Now build random odds list based on buy candidates and their price-to-MA;
+    #   lower price-to-MA increases odds of being selected.
+    lottery_markets = []
+    lottery_weights = []
+    for candidate in buy_candidates:
+        print(f"candidate: {candidate['market']} | {candidate['entries']} entries")
+        lottery_markets.append(candidate['market'])
+        lottery_weights.append(float(candidate['entries'] / total_entries))
+
+    target_market = random.choices( population=lottery_markets,
+                                    weights=lottery_weights,
+                                    k=1)[0]
+    target_metric = next(metric for metric in metrics if metric['market'] == target_market)
 
     # Set up a market buy for the first result that isn't overpositioned
     market = target_metric['market']

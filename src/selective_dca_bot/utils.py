@@ -57,7 +57,7 @@ def open_positions_report():
     for result in sorted(results, key=lambda i: i['profit'], reverse=True):
         result_str += f"{'{:>8}'.format(result['market'])}: {'{:>10}'.format(str(result['min_position']))} | {'{:>10}'.format(str(result['max_position']))} | {'{:>6}'.format(str(result['profit_percentage']))}% | {'{:>7f}'.format(result['quantity'])}\n"
 
-    result_str += f"{'-' * 40}\n"
+    result_str += f"{'-' * 53}\n"
     result_str += f"   total: {'{:>11}'.format(str(total_net))} | {'{:>6}'.format(str(total_percentage))}%\n"
 
     return result_str
@@ -82,7 +82,8 @@ def scalped_positions_report():
                 Candle.timestamp.desc()
             ).limit(1)[0].close
 
-        (spent, quantity_scalped) = LongPosition.select(
+        (num_positions, spent, quantity_scalped) = LongPosition.select(
+                fn.COUNT(LongPosition.id),
                 fn.SUM(LongPosition.buy_quantity * LongPosition.purchase_price),
                 fn.SUM(LongPosition.scalped_quantity)
             ).where(
@@ -100,6 +101,7 @@ def scalped_positions_report():
 
         results.append({
             "market": market,
+            "num_positions": num_positions,
             "spent": spent,
             "current_value": current_value,
             "quantity": quantity.normalize()
@@ -108,10 +110,10 @@ def scalped_positions_report():
     total_net = total_net.quantize(Decimal('0.00000001'))
     total_spent = total_spent.quantize(Decimal('0.00000001'))
     for result in sorted(results, key=lambda i: i['current_value'], reverse=True):
-        result_str += f"{'{:>8}'.format(result['market'])}: risked {'{:>10}'.format(str(result['spent']))} | current_value {'{:>10}'.format(str(result['current_value']))} | {'{:>7f}'.format(result['quantity'])}\n"
+        result_str += f"{'{:>8}'.format(result['market'])}: current_value {'{:>10}'.format(str(result['current_value']))} | {'{:>6f}'.format(result['quantity'])} | {result['num_positions']:3d}\n"
 
-    result_str += f"{'-' * 40}\n"
-    result_str += f"   total: risked {'{:>11}'.format(str(total_spent))} | current_value {'{:>10}'.format(str(total_net))}\n"
+    result_str += f"{'-' * 49}\n"
+    result_str += f"   total: {'{:>10}'.format(str(total_net))}\n"
 
     return result_str
 
