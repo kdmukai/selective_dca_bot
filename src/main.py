@@ -220,7 +220,7 @@ if __name__ == '__main__':
         current_positions = utils.open_positions_report()
         print(current_positions)
 
-        if update_order_status:
+        if update_order_status and len(positions_sold) > 0:
             print("\n" + recently_sold)
 
         scalped_positions = utils.scalped_positions_report()
