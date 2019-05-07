@@ -4,7 +4,7 @@ import pytz
 import time
 
 from datetime import timedelta
-from decimal import Decimal
+from decimal import Decimal, ROUND_UP
 
 from termcolor import cprint
 from peewee import (fn, SqliteDatabase, Model, CharField, SmallIntegerField,
@@ -302,13 +302,29 @@ class LongPosition(BaseModel):
             return LongPosition.select(
                 ).where(
                     LongPosition.market == market,
-                    LongPosition.sell_quantity.is_null(True)
+                    LongPosition.sell_timestamp.is_null(True)
                 )
         else:
             return LongPosition.select(
                 ).where(
-                    LongPosition.sell_quantity.is_null(True)
+                    LongPosition.sell_timestamp.is_null(True)
                 )
+
+    def calculate_scalp_sell_price(self, market_params, target_price):
+        # Must ROUND_UP to make sure we cover our initial investment
+        sell_quantity = (self.spent / target_price).quantize(market_params.lot_step_size, rounding=ROUND_UP)
+
+        if sell_quantity >= self.buy_quantity:
+            # The lot_step_size is large (e.g. LTC's 0.01) so there's no way to take a profit
+            #   slice this small. Have to target a bigger price jump in order to achieve a scalp.
+            #   Resulting scalp quantity will equal the lot_step_size minimum.
+            sell_quantity = (self.buy_quantity - market_params.lot_step_size).quantize(market_params.lot_step_size)
+            target_price = (self.spent / sell_quantity).quantize(market_params.price_tick_size, rounding=ROUND_UP)
+
+            print(f"Had to revise target_price up to {target_price} to preserve {(self.buy_quantity - sell_quantity)} scalp")
+
+        return (sell_quantity, target_price)
+
 
     @property
     def timestamp_str(self):

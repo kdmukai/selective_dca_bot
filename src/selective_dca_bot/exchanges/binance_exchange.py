@@ -438,10 +438,25 @@ class BinanceExchange(AbstractExchange):
 
 
     def cancel_order(self, market, order_id):
-        if config.is_test:
-            return
-
-        return self.client.cancel_order(symbol=market, orderId=order_id)
+        """
+            {
+              "symbol": "LTCBTC",
+              "orderId": 28,
+              "origClientOrderId": "myOrder1",
+              "clientOrderId": "cancelMyOrder1",
+              "transactTime": 1507725176595,
+              "price": "1.00000000",
+              "origQty": "10.00000000",
+              "executedQty": "8.00000000",
+              "cummulativeQuoteQty": "8.00000000",
+              "status": "CANCELED",
+              "timeInForce": "GTC",
+              "type": "LIMIT",
+              "side": "SELL"
+            }
+        """
+        result = self.client.cancel_order(symbol=market, orderId=order_id)
+        return (result['status'] == 'CANCELED', result)
 
 
     def update_stop_loss(self, position, stop_loss_price):
@@ -525,6 +540,7 @@ class BinanceExchange(AbstractExchange):
         """
             Batch update open positions by market.
         """
+        market_params = MarketParams.get_market(market, exchange=MarketParams.EXCHANGE__BINANCE)
         first_open_position = positions[0]
 
         print(f"Retrieving order statuses for {market}")
@@ -565,9 +581,9 @@ class BinanceExchange(AbstractExchange):
 
             elif result['status'] == 'FILLED':
                 position.sell_price = Decimal(result['price'])
-                position.sell_quantity = result['executedQty']
+                position.sell_quantity = Decimal(result['executedQty'])
                 position.sell_timestamp = result['updateTime']/1000
-                position.scalped_quantity = position.buy_quantity - position.sell_quantity
+                position.scalped_quantity = (position.buy_quantity - position.sell_quantity).quantize(market_params.lot_step_size)
                 position.save()
 
                 positions_sold.append(position)

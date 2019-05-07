@@ -90,8 +90,6 @@ if __name__ == '__main__':
 
     max_crypto_holdings_percentage = Decimal(arg_config.get('CONFIG', 'MAX_CRYPTO_HOLDINGS_PERCENTAGE'))
     max_consecutive_buys = Decimal(arg_config.get('CONFIG', 'MAX_CONSECUTIVE_BUYS'))
-    ma_ratio_profit_threshold = Decimal(arg_config.get('CONFIG', 'MA_RATIO_PROFIT_THRESHOLD'))
-    min_profit = Decimal(arg_config.get('CONFIG', 'MIN_PROFIT'))
     profit_threshold = Decimal(arg_config.get('CONFIG', 'PROFIT_THRESHOLD'))
 
     try:
@@ -170,7 +168,7 @@ if __name__ == '__main__':
 
 
     #------------------------------------------------------------------------------------
-    #  Update the status of open LongPositions
+    #  Check the status of open LongPositions
     if update_order_status:
         recently_sold = ""
         num_positions_sold = 0
@@ -179,7 +177,7 @@ if __name__ == '__main__':
                     LongPosition.market
                 ).where(
                     LongPosition.exchange == exchange_name,
-                    LongPosition.scalped_quantity.is_null(True)
+                    LongPosition.sell_timestamp.is_null(True)
                 ).distinct()]
 
             for market in markets:
@@ -187,16 +185,18 @@ if __name__ == '__main__':
                         ).where(
                             LongPosition.exchange == exchange_name,
                             LongPosition.market == market,
-                            LongPosition.sell_quantity.is_null(True),
+                            LongPosition.sell_quantity.is_null(True)
                         ).order_by(
                             LongPosition.sell_order_id
                         )
+                if positions.count() == 0:
+                    continue
 
                 positions_sold = exchange.update_order_statuses(market, positions)
 
-            for position in positions_sold:
-                num_positions_sold += 1
-                recently_sold += f"{position.market}: sold {'{:f}'.format(position.sell_quantity.normalize())} | recouped {'{:f}'.format((position.sell_quantity * position.sell_price).quantize(Decimal('0.00000001')))} {base_pair} | scalped {'{:f}'.format(position.scalped_quantity.normalize())}\n"
+                for position in positions_sold:
+                    num_positions_sold += 1
+                    recently_sold += f"{position.market}: sold {'{:f}'.format(position.sell_quantity.normalize())} | recouped {'{:f}'.format((position.sell_quantity * position.sell_price).quantize(Decimal('0.00000001')))} {base_pair} | scalped {'{:f}'.format(position.scalped_quantity.normalize())}\n"
 
         if live_mode and num_positions_sold > 0:
             subject = f"SOLD {num_positions_sold} positions"
@@ -207,16 +207,90 @@ if __name__ == '__main__':
                 Subject=subject,
                 Message=message
             )
-            exit()
+
+
+    #------------------------------------------------------------------------------------
+    #  Update the LIMIT SELL targets of open LongPositions
+    if update_order_status:
+        for exchange_name, exchange in exchanges.items():
+            markets = [lp.market for lp in LongPosition.select(
+                    LongPosition.market
+                ).where(
+                    LongPosition.exchange == exchange_name,
+                    LongPosition.scalped_quantity.is_null(True)
+                ).distinct()]
+
+            for market in markets:
+                market_params = MarketParams.get_market(market)
+                metric = next(m for m in metrics if m['exchange'] == exchange_name and m['market'] == market)
+                current_ma = metric['ma'].quantize(market_params.price_tick_size)
+
+                # Get this market's open positions
+                positions = LongPosition.select(
+                        ).where(
+                            LongPosition.exchange == exchange_name,
+                            LongPosition.market == market,
+                            LongPosition.sell_timestamp.is_null(True),
+                        ).order_by(
+                            LongPosition.purchase_price,
+                            LongPosition.id
+                        )
+
+                if positions.count() == 0:
+                    continue
+
+                for position in positions:
+                    min_sell_price = (position.purchase_price * profit_threshold).quantize(market_params.price_tick_size)
+
+                    # Account for cryptos like LTC with high-value price_tick_sizes
+                    (sell_quantity, target_price) = position.calculate_scalp_sell_price(market_params, min_sell_price)
+                    if target_price > current_ma:
+                        if target_price == position.sell_price:
+                            # This position is already at its min profit. Just have to keep holding
+                            #print(f"Keeping {market} {position.id:3d} at: {position.purchase_price.quantize(market_params.price_tick_size)} | {target_price}")
+                            continue
+                        else:
+                            # MA just dropped below the min_sell_price. Update to the target_price we just calculated.
+                            pass
+
+                    else:
+                        (sell_quantity, target_price) = position.calculate_scalp_sell_price(market_params, current_ma)
+        
+                    print(f"Revise  {market} {position.id:3d} to: {position.purchase_price.quantize(market_params.price_tick_size)} | {target_price} | {(target_price / position.purchase_price * Decimal('100.0')):.2f}%")
+
+                    (success, result) = exchange.cancel_order(market, position.sell_order_id)
+
+                    if not success:
+                        print(f"ERROR CANCELING: {json.dumps(result, indent=4)}")
+
+                    # Save changes in our local DB here so that it'll be easy to spot if the next step fails.
+                    position.sell_order_id = None
+                    position.save()
+
+                    results = exchange.limit_sell(
+                        market=market,
+                        quantity=sell_quantity,
+                        bid_price=target_price
+                    )
+                    """
+                        {
+                            "order_id": order_id,
+                            "price": bid_price,
+                            "quantity": quantized_qty
+                        }
+                    """
+                    print(f"LIMIT SELL ORDER: {results}\n")
+                    print(f"Revised {market} sell target = {(target_price / position.purchase_price * Decimal('100.0')):.2f}%")
+                    position.sell_order_id = results['order_id']
+                    position.sell_price = target_price
+                    position.sell_quantity = sell_quantity
+                    position.save()
 
 
     if buy_amount == Decimal('0.0'):
         # Report out status of current holdings, then we're done.
         current_positions = utils.open_positions_report()
         print(current_positions)
-
-        if update_order_status and len(positions_sold) > 0:
-            print("\n" + recently_sold)
 
         scalped_positions = utils.scalped_positions_report()
         print("\n" + scalped_positions)
@@ -326,20 +400,17 @@ if __name__ == '__main__':
             watchlist=",".join(watchlist),
         )
 
-        # Immediately place a LIMIT SELL order for this position at the target profit level
-        target_price = (position.purchase_price * profit_threshold).quantize(market_params.price_tick_size, rounding=ROUND_UP)
+        # Immediately place a LIMIT SELL order for this position.
+        #   Initial sell price will be aggressive: the current MA. This will get adjusted
+        #   down later if the MA continues to drop. But if the current MA is less than the
+        #   min profit target, we'll use that instead.
+        target_price = target_metric['ma'].quantize(market_params.price_tick_size, rounding=ROUND_UP)
+        min_profit_price = (position.purchase_price * profit_threshold).quantize(market_params.price_tick_size, rounding=ROUND_UP)
 
-        # Must ROUND_UP to make sure we cover our initial investment
-        sell_quantity = (position.spent / target_price).quantize(market_params.lot_step_size, rounding=ROUND_UP)
+        if target_price < min_profit_price:
+            target_price = min_profit_price
 
-        if sell_quantity >= position.buy_quantity:
-            # The lot_step_size is large (e.g. LTC's 0.01) so there's no way to take a profit
-            #   slice this small. Have to target a bigger price jump in order to achieve a scalp.
-            #   Resulting scalp quantity will equal the lot_step_size minimum.
-            sell_quantity = (position.buy_quantity - market_params.lot_step_size).quantize(market_params.lot_step_size)
-            target_price = (position.spent / sell_quantity).quantize(market_params.price_tick_size, rounding=ROUND_UP)
-
-            print(f"Had to revise target_price up to {target_price} to preserve {(position.buy_quantity - sell_quantity)} scalp")
+        (sell_quantity, target_price) = position.calculate_scalp_sell_price(market_params, target_price)
 
         results = exchange.limit_sell(market, sell_quantity, target_price)
         """
@@ -350,7 +421,9 @@ if __name__ == '__main__':
             }
         """
         print(f"LIMIT SELL ORDER: {results}\n")
+        print(f"Sell target = {(target_price / position.purchase_price * Decimal('100.0')):.2f}%")
         position.sell_order_id = results['order_id']
+        position.sell_price = results['price']
         position.save()
 
     # Report out status of updated holdings

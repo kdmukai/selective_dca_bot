@@ -30,7 +30,7 @@ def open_positions_report():
                 fn.MAX(LongPosition.purchase_price)
             ).where(
                 LongPosition.market == market,
-                LongPosition.sell_quantity.is_null(True)
+                LongPosition.sell_timestamp.is_null(True)
             ).scalar(as_tuple=True)
 
         quantity = Decimal(quantity).quantize(Decimal('0.00000001'))
@@ -88,7 +88,7 @@ def scalped_positions_report():
                 fn.SUM(LongPosition.scalped_quantity)
             ).where(
                 LongPosition.market == market,
-                LongPosition.scalped_quantity.is_null(False)
+                LongPosition.sell_timestamp.is_null(False)
             ).scalar(as_tuple=True)
 
         quantity = Decimal(quantity_scalped).quantize(Decimal('0.00000001'))
