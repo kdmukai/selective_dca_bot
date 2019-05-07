@@ -256,7 +256,7 @@ if __name__ == '__main__':
                     else:
                         (sell_quantity, target_price) = position.calculate_scalp_sell_price(market_params, current_ma)
         
-                    print(f"Revise  {market} {position.id:3d} to: {position.purchase_price.quantize(market_params.price_tick_size)} | {target_price} | {(target_price / position.purchase_price * Decimal('100.0')):.2f}%")
+                    print(f"Revise  {market} {position.id:3d} {position.sell_price} to: {target_price} | {(target_price / position.purchase_price * Decimal('100.0')):.2f}%")
 
                     (success, result) = exchange.cancel_order(market, position.sell_order_id)
 
