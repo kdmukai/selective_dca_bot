@@ -544,9 +544,9 @@ class BinanceExchange(AbstractExchange):
             return []
 
         market_params = MarketParams.get_market(market, exchange=MarketParams.EXCHANGE__BINANCE)
-        first_open_position = positions[0]
+        first_open_position = next(p for p in positions if p.sell_order_id)
 
-        print(f"Retrieving order statuses for {market}")
+        print(f"Retrieving order statuses for {market}, starting at orderId {first_open_position.sell_order_id}")
         orders = self.client.get_all_orders(
             symbol=first_open_position.market,
             orderId=first_open_position.sell_order_id
