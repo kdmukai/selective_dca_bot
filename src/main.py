@@ -253,7 +253,7 @@ if __name__ == '__main__':
                             pass
 
                     else:
-                        (sell_quantity, target_price) = position.calculate_scalp_sell_price(market_params, current_ma)
+                        (sell_quantity, target_price) = position.calculate_scalp_sell_price(market_params, (min_sell_price + current_ma)/Decimal('2.0'))
 
                         # If the MA has just barely changed, don't bother chasing the tiny difference
                         diff = (max([position.sell_price, target_price]) - min([position.sell_price, target_price])) / min([position.sell_price, target_price])
@@ -411,11 +411,11 @@ if __name__ == '__main__':
         )
 
         # Immediately place a LIMIT SELL order for this position.
-        #   Initial sell price will be aggressive: the current MA. This will get adjusted
-        #   down later if the MA continues to drop. But if the current MA is less than the
-        #   min profit target, we'll use that instead.
-        target_price = target_metric['ma'].quantize(market_params.price_tick_size, rounding=ROUND_UP)
+        #   Initial sell price will be aggressive: avg of the current MA and the min profit target.
+        #   This will get adjusted down later if the MA continues to drop. But if the current MA
+        #   is less than the min profit target, we'll use that instead.
         min_profit_price = (position.purchase_price * profit_threshold).quantize(market_params.price_tick_size, rounding=ROUND_UP)
+        target_price = ((target_metric['ma'] + min_profit_price)/Decimal('2.0')).quantize(market_params.price_tick_size, rounding=ROUND_UP)
 
         if target_price < min_profit_price:
             target_price = min_profit_price
