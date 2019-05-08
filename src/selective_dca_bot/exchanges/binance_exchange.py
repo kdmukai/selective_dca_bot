@@ -592,7 +592,7 @@ class BinanceExchange(AbstractExchange):
                 positions_sold.append(position)
 
             else:
-                raise Exception(f"Unimplemented order status: '{result['status']}'")
+                raise Exception(f"Unimplemented order status: '{result['status']}'\n\n{json.dumps(result, sort_keys=True, indent=4)}")
 
         return positions_sold
 
