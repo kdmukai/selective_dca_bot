@@ -263,14 +263,18 @@ if __name__ == '__main__':
         
                     print(f"Revise  {market} {position.id:3d} {position.sell_price} to: {target_price} | {(target_price / position.purchase_price * Decimal('100.0')):.2f}%")
 
-                    (success, result) = exchange.cancel_order(market, position.sell_order_id)
+                    # All clean records should have a sell_order_id, but we specifically catch
+                    #   bad cases in AbstractExchange.update_order_statuses() so should deal with
+                    #   them here.
+                    if position.sell_order_id:
+                        (success, result) = exchange.cancel_order(market, position.sell_order_id)
 
-                    if not success:
-                        print(f"ERROR CANCELING: {json.dumps(result, indent=4)}")
+                        if not success:
+                            print(f"ERROR CANCELING: {json.dumps(result, indent=4)}")
 
-                    # Save changes in our local DB here so that it'll be easy to spot if the next step fails.
-                    position.sell_order_id = None
-                    position.save()
+                        # Save changes in our local DB here so that it'll be easy to spot if the next step fails.
+                        position.sell_order_id = None
+                        position.save()
 
                     results = exchange.limit_sell(
                         market=market,

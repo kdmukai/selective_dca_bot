@@ -583,13 +583,19 @@ class BinanceExchange(AbstractExchange):
                 continue
 
             elif result['status'] == 'FILLED':
-                position.sell_price = Decimal(result['price'])
-                position.sell_quantity = Decimal(result['executedQty'])
+                position.sell_price = Decimal(result['price']).quantize(market_params.price_tick_size)
+                position.sell_quantity = Decimal(result['executedQty']).quantize(market_params.lot_step_size)
                 position.sell_timestamp = result['updateTime']/1000
                 position.scalped_quantity = (position.buy_quantity - position.sell_quantity).quantize(market_params.lot_step_size)
                 position.save()
 
                 positions_sold.append(position)
+
+            elif result['status'] == 'CANCELED':
+                # Somehow the management of this order's cancellation didn't make it into the DB.
+                print(f"CANCELED order not properly updated in DB: {market} {position.id}")
+                position.sell_order_id = None
+                position.save()
 
             else:
                 raise Exception(f"Unimplemented order status: '{result['status']}'\n\n{json.dumps(result, sort_keys=True, indent=4)}")
