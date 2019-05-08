@@ -245,7 +245,7 @@ if __name__ == '__main__':
                     # Account for cryptos like LTC with high-value price_tick_sizes
                     (sell_quantity, target_price) = position.calculate_scalp_sell_price(market_params, min_sell_price)
                     if target_price > current_ma:
-                        if target_price == position.sell_price:
+                        if target_price == position.sell_price.quantize(market_params.price_tick_size):
                             # This position is already at its min profit. Just have to keep holding
                             #print(f"Keeping {market} {position.id:3d} at: {position.purchase_price.quantize(market_params.price_tick_size)} | {target_price}")
                             continue
@@ -255,6 +255,13 @@ if __name__ == '__main__':
 
                     else:
                         (sell_quantity, target_price) = position.calculate_scalp_sell_price(market_params, current_ma)
+
+                        # If the MA has just barely changed, don't bother chasing the tiny difference
+                        diff = (max([position.sell_price, target_price]) - min([position.sell_price, target_price])) / min([position.sell_price, target_price])
+                        if diff < Decimal('0.0025'):
+                            # Current sell_price is close enough
+                            print(f"Not going to bother updating {position.sell_price} to {target_price} ({diff * Decimal('100.0'):.2f}%)")
+                            continue
         
                     print(f"Revise  {market} {position.id:3d} {position.sell_price} to: {target_price} | {(target_price / position.purchase_price * Decimal('100.0')):.2f}%")
 
