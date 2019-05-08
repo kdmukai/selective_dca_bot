@@ -243,7 +243,8 @@ if __name__ == '__main__':
                     # Account for cryptos like LTC with high-value price_tick_sizes
                     (sell_quantity, target_price) = position.calculate_scalp_sell_price(market_params, min_sell_price)
                     if target_price > current_ma:
-                        if target_price == position.sell_price.quantize(market_params.price_tick_size):
+                        # position.sell_price could be None if it was a partially-canceled error position
+                        if position.sell_price and target_price == position.sell_price.quantize(market_params.price_tick_size):
                             # This position is already at its min profit. Just have to keep holding
                             #print(f"Keeping {market} {position.id:3d} at: {position.purchase_price.quantize(market_params.price_tick_size)} | {target_price}")
                             continue

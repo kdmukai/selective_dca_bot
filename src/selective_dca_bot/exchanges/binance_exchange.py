@@ -595,6 +595,8 @@ class BinanceExchange(AbstractExchange):
                 # Somehow the management of this order's cancellation didn't make it into the DB.
                 print(f"CANCELED order not properly updated in DB: {market} {position.id}")
                 position.sell_order_id = None
+                position.sell_price = None
+                position.sell_quantity = None
                 position.save()
 
             else:
