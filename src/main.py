@@ -185,7 +185,7 @@ if __name__ == '__main__':
                         ).where(
                             LongPosition.exchange == exchange_name,
                             LongPosition.market == market,
-                            LongPosition.sell_quantity.is_null(True)
+                            LongPosition.sell_timestamp.is_null(True)
                         ).order_by(
                             LongPosition.sell_order_id
                         )
