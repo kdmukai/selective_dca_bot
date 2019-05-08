@@ -189,8 +189,6 @@ if __name__ == '__main__':
                         ).order_by(
                             LongPosition.sell_order_id
                         )
-                if positions.count() == 0:
-                    continue
 
                 positions_sold = exchange.update_order_statuses(market, positions)
 

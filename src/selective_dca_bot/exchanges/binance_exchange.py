@@ -540,6 +540,9 @@ class BinanceExchange(AbstractExchange):
         """
             Batch update open positions by market.
         """
+        if positions.count() == 0:
+            return []
+
         market_params = MarketParams.get_market(market, exchange=MarketParams.EXCHANGE__BINANCE)
         first_open_position = positions[0]
 
