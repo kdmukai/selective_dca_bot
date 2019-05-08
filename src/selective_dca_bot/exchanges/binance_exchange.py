@@ -361,7 +361,7 @@ class BinanceExchange(AbstractExchange):
             raise e
 
         if config.verbose:
-            print(f"LIMIT SELL ORDER: {json.dumps(response, sort_keys=True, indent=4)}")
+            print(f"LIMIT SELL ORDER: {response}")
 
         order_id = response["orderId"]
         timestamp = response["transactTime"] / 1000
