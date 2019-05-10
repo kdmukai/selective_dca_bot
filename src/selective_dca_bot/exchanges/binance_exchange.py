@@ -41,12 +41,12 @@ class BinanceExchange(AbstractExchange):
         return self._exchange_name
 
 
-    def initialize_market(self, market):
+    def initialize_market(self, market, recheck=False):
         """
             Make sure we have MarketParams for the given market
         """
         params = MarketParams.get_market(market, exchange=MarketParams.EXCHANGE__BINANCE)
-        if not params:
+        if not params or recheck:
             # Have to query the API and populate
             """
                 {
@@ -82,23 +82,43 @@ class BinanceExchange(AbstractExchange):
             tick_size = None
             step_size = None
             min_notional = None
+            multiplier_up = None
+            avg_price_minutes = None
             for filter in response["filters"]:
-                if "tickSize" in filter:
+                if filter['filterType'] == 'PRICE_FILTER':
                     tick_size = Decimal(filter["tickSize"])
-                elif "stepSize" in filter:
+
+                elif filter['filterType'] == 'LOT_SIZE':
                     step_size = Decimal(filter["stepSize"])
-                elif "minNotional" in filter:
+
+                elif filter['filterType'] == 'MIN_NOTIONAL':
                     min_notional = Decimal(filter["minNotional"])
 
-            MarketParams.create(
-                exchange=MarketParams.EXCHANGE__BINANCE,
-                market=market,
-                price_tick_size=tick_size,
-                lot_step_size=step_size,
-                min_notional=min_notional
-            )
+                elif filter['filterType'] == 'PERCENT_PRICE':
+                    multiplier_up = Decimal(filter["multiplierUp"])
+                    avg_price_minutes = Decimal(filter["avgPriceMins"])
 
-            print(f"Loaded MarketParams for {market}")
+            if params:
+                params.tick_size = tick_size
+                params.step_size = step_size
+                params.min_notional = min_notional
+                params.multiplier_up = multiplier_up
+                params.avg_price_minutes = avg_price_minutes
+                params.save()
+
+                print(f"Re-loaded MarketParams for {market}")
+            else:
+                MarketParams.create(
+                    exchange=MarketParams.EXCHANGE__BINANCE,
+                    market=market,
+                    price_tick_size=tick_size,
+                    lot_step_size=step_size,
+                    min_notional=min_notional,
+                    multiplier_up=multiplier_up,
+                    avg_price_minutes=avg_price_minutes
+                )
+
+                print(f"Loaded MarketParams for {market}")
 
 
     def ingest_latest_candles(self, market, interval, limit=5):

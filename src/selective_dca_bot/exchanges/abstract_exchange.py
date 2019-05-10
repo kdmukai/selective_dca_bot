@@ -51,7 +51,7 @@ class AbstractExchange(ABC):
         # update ALL cryptos ever watched for this exchange (to support historical back testing)
         for crypto in AllTimeWatchlist.get_watchlist(exchange=self.exchange_name):
             market = f"{crypto}{base_pair}"
-            self.initialize_market(market)
+            self.initialize_market(market, recheck=True)
 
             # How many candles do we need to catch up on?
             last_candle = Candle.get_last_candle(market, interval)

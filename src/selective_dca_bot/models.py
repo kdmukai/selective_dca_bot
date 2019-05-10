@@ -353,6 +353,8 @@ class MarketParams(BaseModel):
     price_tick_size = DecimalField()
     lot_step_size = DecimalField()
     min_notional = DecimalField()
+    multiplier_up = DecimalField(null=True)
+    avg_price_minutes = DecimalField(null=True)
 
     @staticmethod
     def get_market(market, exchange=EXCHANGE__BINANCE):
