@@ -230,7 +230,7 @@ if __name__ == '__main__':
                             LongPosition.market == market,
                             LongPosition.sell_timestamp.is_null(True),
                         ).order_by(
-                            LongPosition.purchase_price,
+                            LongPosition.purchase_price.desc(),
                             LongPosition.id
                         )
 
