@@ -259,7 +259,7 @@ if __name__ == '__main__':
                             # position.sell_price could be None if it was a partially-canceled error position
                             if position.sell_price and target_price == position.sell_price.quantize(market_params.price_tick_size):
                                 # This position is already at its min profit. Just have to keep holding
-                                print(f"Keeping {market} {position.id:3d} {position.purchase_price} at {target_price}")
+                                print(f"Keeping {market} {position.id:3d} {position.purchase_price.quantize(market_params.price_tick_size):0.8f} at {target_price:0.8f}")
                                 continue
                             else:
                                 # MA just dropped below the min_sell_price. Update to the target_price we just calculated.
@@ -273,15 +273,15 @@ if __name__ == '__main__':
                             diff = (max([position.sell_price, target_price]) - min([position.sell_price, target_price])) / min([position.sell_price, target_price])
                             if diff < Decimal('0.0025'):
                                 # Current sell_price is close enough
-                                print(f"Not going to bother updating {market} {position.id:3d} {position.purchase_price} {position.sell_price} to {target_price} ({diff * Decimal('100.0'):.2f}%)")
+                                print(f"Not going to bother updating {market} {position.id:3d} {position.purchase_price.quantize(market_params.price_tick_size):0.8f} {position.sell_price:0.8f} to {target_price:0.8f} ({diff * Decimal('100.0'):.2f}%)")
                                 continue
             
-                        print(f"Revise {market} {position.id:3d} {position.purchase_price} to: {target_price} | {(target_price / position.purchase_price * Decimal('100.0')):.2f}%")
+                        print(f"Revise  {market} {position.id:3d} {position.purchase_price.quantize(market_params.price_tick_size):0.8f} to: {target_price:0.8f} | {(target_price / position.purchase_price * Decimal('100.0')):.2f}%")
 
                     # Factor in the max percent price range allowed for API orders
                     max_price = (current_price * market_params.multiplier_up).quantize(market_params.price_tick_size)
                     if target_price > max_price:
-                        print(f"New price ({target_price}) most likely exceeds PERCENT_PRICE ({max_price})")
+                        print(f"{market} {position.id:3d} New price {target_price:0.8f} most likely exceeds PERCENT_PRICE {max_price:0.8f}")
                         continue
 
 
