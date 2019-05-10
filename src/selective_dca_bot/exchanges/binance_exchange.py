@@ -355,7 +355,16 @@ class BinanceExchange(AbstractExchange):
             error_msg = (f"LIMIT SELL ORDER: {market}" +
                          f" | quantized_qty: {quantized_qty}\n" +
                          f"{e}")
+            if 'PERCENT_PRICE' in error_msg:
+                cprint(f"Attempted to set a price ({bid_price}) outside the exchange's {market} PERCENT_PRICE range", "red")
+                return None
+
+            if 'MIN_NOTIONAL' in error_msg:
+                cprint(f"Attempted to set a notional value ({bid_price} * {quantized_qty}) outside the exchange's {market} MIN_NOTIONAL", "red")
+                return None
+
             cprint(error_msg, "red")
+
 
             # TODO: Email error notifications?
             raise e

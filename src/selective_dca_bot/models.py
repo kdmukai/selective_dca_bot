@@ -314,6 +314,11 @@ class LongPosition(BaseModel):
         # Must ROUND_UP to make sure we cover our initial investment
         sell_quantity = (self.spent / target_price).quantize(market_params.lot_step_size, rounding=ROUND_UP)
 
+        if sell_quantity * target_price < market_params.min_notional:
+            # Can't execute a sell order worth less than MIN_NOTIONAL
+            # Adjust price up but hold quantity.
+            target_price = (market_params.min_notional / sell_quantity).quantize(market_params.price_tick_size, rounding=ROUND_UP)
+
         if sell_quantity >= self.buy_quantity:
             # The lot_step_size is large (e.g. LTC's 0.01) so there's no way to take a profit
             #   slice this small. Have to target a bigger price jump in order to achieve a scalp.
@@ -321,7 +326,7 @@ class LongPosition(BaseModel):
             sell_quantity = (self.buy_quantity - market_params.lot_step_size).quantize(market_params.lot_step_size)
             target_price = (self.spent / sell_quantity).quantize(market_params.price_tick_size, rounding=ROUND_UP)
 
-            print(f"Had to revise target_price up to {target_price} to preserve {(self.buy_quantity - sell_quantity)} scalp")
+            # print(f"Had to revise target_price up to {target_price} to preserve {(self.buy_quantity - sell_quantity)} scalp")
 
         return (sell_quantity, target_price)
 

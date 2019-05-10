@@ -237,32 +237,44 @@ if __name__ == '__main__':
                 if positions.count() == 0:
                     continue
 
-                for position in positions:
-                    min_sell_price = (position.purchase_price * profit_threshold).quantize(market_params.price_tick_size)
+                last_target_price = None
+                for index, position in enumerate(positions):
+                    if index >= int(len(positions) * 0.75) and last_target_price:
+                        # Hold the last 1/4 of the stash at the 75th percentile's target price
+                        target_price = last_target_price
 
-                    # Account for cryptos like LTC with high-value price_tick_sizes
-                    (sell_quantity, target_price) = position.calculate_scalp_sell_price(market_params, min_sell_price)
-                    if target_price > current_ma:
-                        # position.sell_price could be None if it was a partially-canceled error position
                         if position.sell_price and target_price == position.sell_price.quantize(market_params.price_tick_size):
                             # This position is already at its min profit. Just have to keep holding
-                            #print(f"Keeping {market} {position.id:3d} at: {position.purchase_price.quantize(market_params.price_tick_size)} | {target_price}")
+                            print(f"Keeping {market} {position.id:3d} {position.purchase_price} at {target_price}")
                             continue
-                        else:
-                            # MA just dropped below the min_sell_price. Update to the target_price we just calculated.
-                            pass
 
                     else:
-                        (sell_quantity, target_price) = position.calculate_scalp_sell_price(market_params, (min_sell_price + current_ma)/Decimal('2.0'))
+                        min_sell_price = (position.purchase_price * profit_threshold).quantize(market_params.price_tick_size)
 
-                        # If the MA has just barely changed, don't bother chasing the tiny difference
-                        diff = (max([position.sell_price, target_price]) - min([position.sell_price, target_price])) / min([position.sell_price, target_price])
-                        if diff < Decimal('0.0025'):
-                            # Current sell_price is close enough
-                            print(f"Not going to bother updating {position.sell_price} to {target_price} ({diff * Decimal('100.0'):.2f}%)")
-                            continue
-        
-                    print(f"Revise  {market} {position.id:3d} {position.sell_price} to: {target_price} | {(target_price / position.purchase_price * Decimal('100.0')):.2f}%")
+                        # Account for cryptos like LTC with high-value price_tick_sizes
+                        (sell_quantity, target_price) = position.calculate_scalp_sell_price(market_params, min_sell_price)
+                        if target_price > current_ma:
+                            # position.sell_price could be None if it was a partially-canceled error position
+                            if position.sell_price and target_price == position.sell_price.quantize(market_params.price_tick_size):
+                                # This position is already at its min profit. Just have to keep holding
+                                print(f"Keeping {market} {position.id:3d} {position.purchase_price} at {target_price}")
+                                continue
+                            else:
+                                # MA just dropped below the min_sell_price. Update to the target_price we just calculated.
+                                pass
+
+                        else:
+                            (sell_quantity, target_price) = position.calculate_scalp_sell_price(market_params, (min_sell_price + current_ma)/Decimal('2.0'))
+
+                            # If the MA has just barely changed, don't bother chasing the tiny difference
+                            diff = (max([position.sell_price, target_price]) - min([position.sell_price, target_price])) / min([position.sell_price, target_price])
+                            if diff < Decimal('0.0025'):
+                                # Current sell_price is close enough
+                                print(f"Not going to bother updating {market} {position.id:3d} {position.purchase_price} {position.sell_price} to {target_price} ({diff * Decimal('100.0'):.2f}%)")
+                                continue
+            
+                        print(f"Revise {market} {position.id:3d} {position.purchase_price} to: {target_price} | {(target_price / position.purchase_price * Decimal('100.0')):.2f}%")
+                        last_target_price = target_price
 
                     # All clean records should have a sell_order_id, but we specifically catch
                     #   bad cases in AbstractExchange.update_order_statuses() so should deal with
@@ -276,6 +288,9 @@ if __name__ == '__main__':
                         # Save changes in our local DB here so that it'll be easy to spot if the next step fails.
                         position.sell_order_id = None
                         position.save()
+                    else:
+                        # If there's no sell_order_id, it's already been canceled
+                        pass
 
                     results = exchange.limit_sell(
                         market=market,
@@ -289,12 +304,13 @@ if __name__ == '__main__':
                             "quantity": quantized_qty
                         }
                     """
-                    print(f"LIMIT SELL ORDER: {results}\n")
-                    print(f"Revised {market} sell target = {(target_price / position.purchase_price * Decimal('100.0')):.2f}%")
-                    position.sell_order_id = results['order_id']
-                    position.sell_price = target_price
-                    position.sell_quantity = sell_quantity
-                    position.save()
+                    if results:
+                        print(f"LIMIT SELL ORDER: {results}\n")
+                        print(f"Revised {market} sell target = {(target_price / position.purchase_price * Decimal('100.0')):.2f}%")
+                        position.sell_order_id = results['order_id']
+                        position.sell_price = target_price
+                        position.sell_quantity = sell_quantity
+                        position.save()
 
 
     if buy_amount == Decimal('0.0'):
