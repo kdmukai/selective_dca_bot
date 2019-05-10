@@ -221,6 +221,7 @@ if __name__ == '__main__':
             for market in markets:
                 market_params = MarketParams.get_market(market)
                 metric = next(m for m in metrics if m['exchange'] == exchange_name and m['market'] == market)
+                current_price = metric['close'].quantize(market_params.price_tick_size)
                 current_ma = metric['ma'].quantize(market_params.price_tick_size)
 
                 # Get this market's open positions
