@@ -253,6 +253,7 @@ if __name__ == '__main__':
 
                         # Account for cryptos like LTC with high-value price_tick_sizes
                         (sell_quantity, target_price) = position.calculate_scalp_sell_price(market_params, min_sell_price)
+                        last_target_price = target_price
                         if target_price > current_ma:
                             # position.sell_price could be None if it was a partially-canceled error position
                             if position.sell_price and target_price == position.sell_price.quantize(market_params.price_tick_size):
@@ -265,6 +266,7 @@ if __name__ == '__main__':
 
                         else:
                             (sell_quantity, target_price) = position.calculate_scalp_sell_price(market_params, (min_sell_price + current_ma)/Decimal('2.0'))
+                            last_target_price = target_price
 
                             # If the MA has just barely changed, don't bother chasing the tiny difference
                             diff = (max([position.sell_price, target_price]) - min([position.sell_price, target_price])) / min([position.sell_price, target_price])
@@ -274,7 +276,6 @@ if __name__ == '__main__':
                                 continue
             
                         print(f"Revise {market} {position.id:3d} {position.purchase_price} to: {target_price} | {(target_price / position.purchase_price * Decimal('100.0')):.2f}%")
-                        last_target_price = target_price
 
                     # All clean records should have a sell_order_id, but we specifically catch
                     #   bad cases in AbstractExchange.update_order_statuses() so should deal with
