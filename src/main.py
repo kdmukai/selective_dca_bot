@@ -278,6 +278,13 @@ if __name__ == '__main__':
             
                         print(f"Revise {market} {position.id:3d} {position.purchase_price} to: {target_price} | {(target_price / position.purchase_price * Decimal('100.0')):.2f}%")
 
+                    # Factor in the max percent price range allowed for API orders
+                    max_price = (current_price * market_params.multiplier_up).quantize(market_params.price_tick_size)
+                    if target_price > max_price:
+                        print(f"New price ({target_price}) most likely exceeds PERCENT_PRICE ({max_price})")
+                        continue
+
+
                     # All clean records should have a sell_order_id, but we specifically catch
                     #   bad cases in AbstractExchange.update_order_statuses() so should deal with
                     #   them here.

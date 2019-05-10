@@ -310,6 +310,14 @@ class LongPosition(BaseModel):
                     LongPosition.sell_timestamp.is_null(True)
                 )
 
+    @property
+    def timestamp_str(self):
+        return datetime.datetime.fromtimestamp(self.timestamp).strftime('%Y-%m-%d %H:%M:%S')
+
+    @property
+    def spent(self, exclude_fees=True):
+        return self.buy_quantity * self.purchase_price
+
     def calculate_scalp_sell_price(self, market_params, target_price):
         # Must ROUND_UP to make sure we cover our initial investment
         sell_quantity = (self.spent / target_price).quantize(market_params.lot_step_size, rounding=ROUND_UP)
@@ -329,16 +337,6 @@ class LongPosition(BaseModel):
             # print(f"Had to revise target_price up to {target_price} to preserve {(self.buy_quantity - sell_quantity)} scalp")
 
         return (sell_quantity, target_price)
-
-
-    @property
-    def timestamp_str(self):
-        return datetime.datetime.fromtimestamp(self.timestamp).strftime('%Y-%m-%d %H:%M:%S')
-
-    @property
-    def spent(self, exclude_fees=True):
-        return self.buy_quantity * self.purchase_price
-
 
 
 class MarketParams(BaseModel):
