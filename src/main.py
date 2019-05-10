@@ -273,7 +273,7 @@ if __name__ == '__main__':
                             diff = (max([position.sell_price, target_price]) - min([position.sell_price, target_price])) / min([position.sell_price, target_price])
                             if diff < Decimal('0.0025'):
                                 # Current sell_price is close enough
-                                print(f"Not going to bother updating {market} {position.id:3d} {position.purchase_price.quantize(market_params.price_tick_size):0.8f} {position.sell_price:0.8f} to {target_price:0.8f} ({diff * Decimal('100.0'):.2f}%)")
+                                print(f"Not going to bother updating {market} {position.id:3d} ({position.purchase_price.quantize(market_params.price_tick_size):0.8f}): {position.sell_price:0.8f} to {target_price:0.8f} ({diff * Decimal('100.0'):.2f}%)")
                                 continue
             
                         print(f"Revise  {market} {position.id:3d} {position.purchase_price.quantize(market_params.price_tick_size):0.8f} to: {target_price:0.8f} | {(target_price / position.purchase_price * Decimal('100.0')):.2f}%")
