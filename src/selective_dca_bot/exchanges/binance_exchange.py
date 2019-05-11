@@ -578,7 +578,8 @@ class BinanceExchange(AbstractExchange):
         print(f"Retrieving order statuses for {market}, starting at orderId {first_open_position.sell_order_id}")
         orders = self.client.get_all_orders(
             symbol=first_open_position.market,
-            orderId=first_open_position.sell_order_id
+            orderId=first_open_position.sell_order_id,
+            limit=1000
         )
         """
             [{
@@ -600,7 +601,9 @@ class BinanceExchange(AbstractExchange):
                 "isWorking": true
             }, {...}, {...}]
         """
+        print(f"{market} orders retrieved: {len(orders)} | positions: {positions.count()}")
         positions_sold = []
+        orders_processed = []
         for position in positions:
             if position.sell_order_id is None:
                 continue
@@ -608,7 +611,13 @@ class BinanceExchange(AbstractExchange):
             result = next((r for r in orders if r['orderId'] == position.sell_order_id), None)
 
             if not result:
-                raise Exception(f"orderId {position.sell_order_id} not found for position {position.id}: {market}")
+                cprint(f"orderId {position.sell_order_id} not found for position {position.id}: {market}", "red")
+
+                # Assume the order be found individually and proceed
+                result = self.get_sell_order_status(position)
+                print(result)
+
+            orders_processed.append(position.sell_order_id)
 
             if result['status'] == 'NEW':
                 # Nothing to do. Still waiting for LIMIT SELL.
@@ -633,6 +642,14 @@ class BinanceExchange(AbstractExchange):
 
             else:
                 raise Exception(f"Unimplemented order status: '{result['status']}'\n\n{json.dumps(result, sort_keys=True, indent=4)}")
+
+        # Cancel any 'NEW' orders that aren't connected to a position
+        for order in orders:
+            if order['status'] == 'NEW' and order['orderId'] not in orders_processed:
+                # Cancel this order!
+                cprint(f"CANCELING {market} order {order['orderId']}", "red")
+                result = self.cancel_order(market, order['orderId'])
+                print(result)
 
         return positions_sold
 
