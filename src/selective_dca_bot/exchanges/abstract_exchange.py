@@ -62,7 +62,7 @@ class AbstractExchange(ABC):
             else:
                 num_candles = max(ma_periods) + 1
 
-            self.ingest_latest_candles(market, interval, num_candles)
+            self.ingest_latest_candles(market, interval, last_candle.timestamp, num_candles)
 
             # Calculate the metrics for the current candle
             last_candle = Candle.get_last_candle(market, interval)

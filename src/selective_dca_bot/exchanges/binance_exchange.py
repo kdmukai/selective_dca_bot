@@ -121,7 +121,7 @@ class BinanceExchange(AbstractExchange):
                 print(f"Loaded MarketParams for {market}")
 
 
-    def ingest_latest_candles(self, market, interval, limit=5):
+    def ingest_latest_candles(self, market, interval, since=None, limit=5):
         """
             Get the most recent n (limit) candles.
 
@@ -144,13 +144,18 @@ class BinanceExchange(AbstractExchange):
             # Never ingest the most recent (still-open) candle
             return
 
-        print(f"num {market} candles: {limit}")
+        print(f"{market} candles: {limit} | {since}")
 
         # Give the exchange a breather so we don't get API limited
         if limit > 10:
-            time.sleep(5)
+            time.sleep(3)
 
-        raw_data = self.client.get_klines(symbol=market, interval=self._intervals[interval], limit=limit)
+        if since:
+            # Convert Unix timestamp to binance's millisecond timestamp
+            since = since * 1000 + 1
+
+        raw_data = self.client.get_klines(symbol=market, interval=self._intervals[interval], startTime=since, limit=limit)
+        # print(json.dumps(raw_data, indent=4))
 
         # Never ingest the most recent (still-open) candle (most recent is last)
         Candle.batch_create_candles(market, interval, self._format_candles(raw_data[:-1]))
@@ -368,12 +373,13 @@ class BinanceExchange(AbstractExchange):
             response = self.client.order_limit_sell(
                 symbol=market,
                 quantity=quantized_qty,
-                price=bid_price,
+                price=f"{bid_price:0.8f}",  # Pass as string to ensure input accuracy and format
                 newOrderRespType=Client.ORDER_RESP_TYPE_FULL    # Need the full details to get 'commission' (aka fees).
             )
         except Exception as e:
             error_msg = (f"LIMIT SELL ORDER: {market}" +
-                         f" | quantized_qty: {quantized_qty}\n" +
+                         f" | quantized_qty: {quantized_qty}" +
+                         f" | bid_price: {bid_price}" +
                          f"{e}")
             if 'PERCENT_PRICE' in error_msg:
                 cprint(f"Attempted to set a price ({bid_price}) outside the exchange's {market} PERCENT_PRICE range", "red")

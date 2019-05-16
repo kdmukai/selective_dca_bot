@@ -60,7 +60,7 @@ def open_positions_report():
 
     total_percentage = (total_net / total_spent * Decimal('100.0')).quantize(Decimal('0.01'))
     for result in sorted(results, key=lambda i: i['profit'], reverse=True):
-        result_str += f"{'{:>8}'.format(result['market'])}: {'{:>10}'.format(str(result['min_position']))} | {'{:>10}'.format(str(result['min_sell_price']))} ({'{:>6}'.format(str(result['min_profit_percentage']))}%) | {'{:>2}'.format(str(result['num_positions']))} | {'{:>6}'.format(str(result['current_profit_percentage']))}%\n"
+        result_str += f"{'{:>8}'.format(result['market'])}: {result['min_position']:0.8f} | {result['min_sell_price']:0.8f} ({'{:>6}'.format(str(result['min_profit_percentage']))}%) | {'{:>2}'.format(str(result['num_positions']))} | {'{:>6}'.format(str(result['current_profit_percentage']))}%\n"
 
     result_str += f"{'-' * 53}\n"
     result_str += f"   total: {'{:>11}'.format(str(total_net))} | {'{:>6}'.format(str(total_percentage))}%\n"

@@ -246,7 +246,7 @@ if __name__ == '__main__':
 
                         if position.sell_price and target_price == position.sell_price.quantize(market_params.price_tick_size):
                             # This position is already at its min profit. Just have to keep holding
-                            print(f"Keeping {market} {position.id:3d} {position.purchase_price} at {target_price}")
+                            # print(f"Keeping {market} {position.id:3d} {position.purchase_price:0.8f} at {target_price:0.8f}")
                             continue
 
                     else:
@@ -259,7 +259,7 @@ if __name__ == '__main__':
                             # position.sell_price could be None if it was a partially-canceled error position
                             if position.sell_price and target_price == position.sell_price.quantize(market_params.price_tick_size):
                                 # This position is already at its min profit. Just have to keep holding
-                                print(f"Keeping {market} {position.id:3d} {position.purchase_price.quantize(market_params.price_tick_size):0.8f} at {target_price:0.8f}")
+                                # print(f"Keeping {market} {position.id:3d} {position.purchase_price.quantize(market_params.price_tick_size):0.8f} at {target_price:0.8f}")
                                 continue
                             else:
                                 # MA just dropped below the min_sell_price. Update to the target_price we just calculated.
@@ -282,8 +282,14 @@ if __name__ == '__main__':
                     max_price = (current_price * market_params.multiplier_up).quantize(market_params.price_tick_size)
                     if target_price > max_price:
                         print(f"{market} {position.id:3d} New price {target_price:0.8f} most likely exceeds PERCENT_PRICE {max_price:0.8f}")
-                        continue
+                        # So for now set the LIMIT SELL price for the whole lot at nearly the PERCENT_PRICE limit
+                        #   (this will most likely get re-set once the price gets closer).
+                        target_price = (max_price * Decimal('0.99')).quantize(market_params.price_tick_size)
+                        sell_quantity = position.buy_quantity
 
+                    if target_price * sell_quantity < market_params.min_notional:
+                        print(f"{market} {position.id:3d} sell order for {sell_quantity} @ {target_price:0.8f} ({target_price * sell_quantity:0.4f}) is below MIN_NOTIONAL ({market_params.min_notional})")
+                        continue
 
                     # All clean records should have a sell_order_id, but we specifically catch
                     #   bad cases in AbstractExchange.update_order_statuses() so should deal with
@@ -371,6 +377,10 @@ if __name__ == '__main__':
                 and price_to_ma < Decimal('1.0')):
             # Use a cubed distance function to more heavily weight the lower price-to-MAs
             entries = (((Decimal('1.0') / price_to_ma * Decimal('100.0')) - Decimal('100.0')) ** Decimal('3')).quantize(Decimal('1'))
+
+            if entries < Decimal('1'):
+                # Distance can be zero if close enough to MA
+                entries = Decimal('1')
             total_entries += entries
 
             buy_candidates.append({
