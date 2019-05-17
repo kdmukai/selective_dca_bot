@@ -55,14 +55,16 @@ class AbstractExchange(ABC):
 
             # How many candles do we need to catch up on?
             last_candle = Candle.get_last_candle(market, interval)
+            timestamp = None
             if last_candle:
                 num_candles = last_candle.num_periods_from_now()
                 if num_candles > max(ma_periods):
                     num_candles = max(ma_periods)
+                timestamp = last_candle.timestamp
             else:
                 num_candles = max(ma_periods) + 1
 
-            self.ingest_latest_candles(market, interval, last_candle.timestamp, num_candles)
+            self.ingest_latest_candles(market, interval, since=timestamp, limit=num_candles)
 
             # Calculate the metrics for the current candle
             last_candle = Candle.get_last_candle(market, interval)

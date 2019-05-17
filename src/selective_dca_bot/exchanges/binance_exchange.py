@@ -514,7 +514,7 @@ class BinanceExchange(AbstractExchange):
             )
 
 
-    def get_sell_order_status(self, position):
+    def get_sell_order(self, position):
         try:
             if not position.sell_order_id:
                 # Can't look for nothing
@@ -545,6 +545,12 @@ class BinanceExchange(AbstractExchange):
                   f" | orderId: {position.sell_order_id}" +
                   f"\n{e}")
             raise e
+
+        return response
+
+
+    def get_sell_order_status(self, position):
+        response = self.get_sell_order(position)
 
         if response["status"] == 'FILLED':
             # print(f"ORDER STATUS: FILLED: {response}")
@@ -619,9 +625,9 @@ class BinanceExchange(AbstractExchange):
             if not result:
                 cprint(f"orderId {position.sell_order_id} not found for position {position.id}: {market}", "red")
 
-                # Assume the order be found individually and proceed
-                result = self.get_sell_order_status(position)
-                print(result)
+                # Assume the order can be found individually and proceed
+                result = self.get_sell_order(position)
+                print(result['status'])
 
             orders_processed.append(position.sell_order_id)
 

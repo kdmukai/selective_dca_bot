@@ -287,6 +287,10 @@ if __name__ == '__main__':
                         target_price = (max_price * Decimal('0.99')).quantize(market_params.price_tick_size)
                         sell_quantity = position.buy_quantity
 
+                        if target_price == position.sell_price:
+                            # Nothing to change
+                            continue
+
                     if target_price * sell_quantity < market_params.min_notional:
                         print(f"{market} {position.id:3d} sell order for {sell_quantity} @ {target_price:0.8f} ({target_price * sell_quantity:0.4f}) is below MIN_NOTIONAL ({market_params.min_notional})")
                         continue
@@ -358,6 +362,7 @@ if __name__ == '__main__':
     ma_ratios = ""
     buy_candidates = []
     total_entries = Decimal('0')
+    max_price_to_ma = max(metrics, key=lambda m:m['price_to_ma'])['price_to_ma']
     for metric in sorted(metrics, key = lambda i: i['price_to_ma']):
         market = metric['market']
         crypto = metric['market'][:(-1 * len(base_pair))]
@@ -368,19 +373,14 @@ if __name__ == '__main__':
         price_to_ma = metric['price_to_ma']
         ma_ratios += f"{crypto}: price-to-MA: {price_to_ma:0.4f} | positions: {num_positions[crypto]}\n"
 
-        # Consider any crypto that isn't overpositioned, hasn't had too many consecutive
-        #   buys, and whose price-to-MA is below 1.0.
+        # Consider any crypto that isn't overpositioned and hasn't had too many
+        #   consecutive buys.
         #   Calculate a number of entries for a lottery selection process, based on
-        #   price-to-MA.
+        #   price-to-MA distance to max_price_to_ma.
         if (crypto not in over_positioned
-                and (market not in recent_markets or len(recent_markets) > 1)
-                and price_to_ma < Decimal('1.0')):
+                and (market not in recent_markets or len(recent_markets) > 1)):
             # Use a cubed distance function to more heavily weight the lower price-to-MAs
-            entries = (((Decimal('1.0') / price_to_ma * Decimal('100.0')) - Decimal('100.0')) ** Decimal('3')).quantize(Decimal('1'))
-
-            if entries < Decimal('1'):
-                # Distance can be zero if close enough to MA
-                entries = Decimal('1')
+            entries = (((max_price_to_ma - price_to_ma) * Decimal('100.0')) ** Decimal('3')).quantize(Decimal('1'))
             total_entries += entries
 
             buy_candidates.append({
