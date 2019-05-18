@@ -656,12 +656,12 @@ class BinanceExchange(AbstractExchange):
                 raise Exception(f"Unimplemented order status: '{result['status']}'\n\n{json.dumps(result, sort_keys=True, indent=4)}")
 
         # Cancel any 'NEW' orders that aren't connected to a position
-        for order in orders:
-            if order['status'] == 'NEW' and order['orderId'] not in orders_processed:
-                # Cancel this order!
-                cprint(f"CANCELING {market} order {order['orderId']}", "red")
-                result = self.cancel_order(market, order['orderId'])
-                print(result)
+        # for order in orders:
+        #     if order['status'] == 'NEW' and order['orderId'] not in orders_processed:
+        #         # Cancel this order!
+        #         cprint(f"CANCELING {market} order {order['orderId']}", "red")
+        #         result = self.cancel_order(market, order['orderId'])
+        #         print(result)
 
         return positions_sold
 
