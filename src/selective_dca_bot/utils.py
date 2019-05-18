@@ -11,7 +11,7 @@ def open_positions_report():
     markets = [lp.market for lp in LongPosition.select(LongPosition.market).distinct()]
 
     results = []
-    result_str = ""
+    result_str = "Open Positions:\n"
     total_net = Decimal('0.0')
     total_spent = Decimal('0.0')
     for market in markets:
@@ -58,7 +58,10 @@ def open_positions_report():
             "quantity": quantity.normalize()
         })
 
-    total_percentage = (total_net / total_spent * Decimal('100.0')).quantize(Decimal('0.01'))
+    if total_spent > Decimal('0.0'):
+        total_percentage = (total_net / total_spent * Decimal('100.0')).quantize(Decimal('0.01'))
+    else:
+        total_percentage = Decimal('0.0')
     for result in sorted(results, key=lambda i: i['profit'], reverse=True):
         result_str += f"{'{:>8}'.format(result['market'])}: {result['min_position']:0.8f} | {result['min_sell_price']:0.8f} ({'{:>6}'.format(str(result['min_profit_percentage']))}%) | {'{:>2}'.format(str(result['num_positions']))} | {'{:>6}'.format(str(result['current_profit_percentage']))}%\n"
 
@@ -76,7 +79,7 @@ def scalped_positions_report():
                 ).distinct()]
 
     results = []
-    result_str = ""
+    result_str = "Scalped Positions:\n"
     total_net = Decimal('0.0')
     total_spent = Decimal('0.0')
     for market in markets:

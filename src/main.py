@@ -356,7 +356,7 @@ if __name__ == '__main__':
     for crypto in watchlist:
         market = f"{crypto}{base_pair}"
         num_positions[crypto] = LongPosition.get_open_positions(market).count()
-        if Decimal(num_positions[crypto] / total_positions) >= max_crypto_holdings_percentage:
+        if total_positions > 0 and Decimal(num_positions[crypto] / total_positions) >= max_crypto_holdings_percentage:
             over_positioned.append(crypto)
 
     ma_ratios = ""
