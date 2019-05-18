@@ -389,6 +389,10 @@ class BinanceExchange(AbstractExchange):
                 cprint(f"Attempted to set a notional value ({bid_price} * {quantized_qty}) outside the exchange's {market} MIN_NOTIONAL", "red")
                 return None
 
+            if 'Account has insufficient balance for requested action.' in error_msg:
+                cprint(f"Insufficent balance for {market} LIMIT SELL {quantized_qty}")
+                return None
+
             cprint(error_msg, "red")
 
 
