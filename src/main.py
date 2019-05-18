@@ -245,7 +245,7 @@ if __name__ == '__main__':
                         # Hold the last 1/4 of the stash at the 75th percentile's target price
                         target_price = last_target_price
 
-                        if position.sell_price and target_price == position.sell_price.quantize(market_params.price_tick_size):
+                        if position.sell_order_id and position.sell_price and target_price == position.sell_price.quantize(market_params.price_tick_size):
                             # This position is already at its min profit. Just have to keep holding
                             # print(f"Keeping {market} {position.id:3d} {position.purchase_price:0.8f} at {target_price:0.8f}")
                             continue
@@ -258,12 +258,12 @@ if __name__ == '__main__':
                         last_target_price = target_price
                         if target_price > current_ma:
                             # position.sell_price could be None if it was a partially-canceled error position
-                            if position.sell_price and target_price == position.sell_price.quantize(market_params.price_tick_size):
+                            if position.sell_order_id and position.sell_price and target_price == position.sell_price.quantize(market_params.price_tick_size):
                                 # This position is already at its min profit. Just have to keep holding
                                 # print(f"Keeping {market} {position.id:3d} {position.purchase_price.quantize(market_params.price_tick_size):0.8f} at {target_price:0.8f}")
                                 continue
                             else:
-                                # MA just dropped below the min_sell_price. Update to the target_price we just calculated.
+                                # Update to the target_price we just calculated.
                                 pass
 
                         else:
