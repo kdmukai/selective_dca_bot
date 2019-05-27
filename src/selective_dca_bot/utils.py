@@ -35,6 +35,9 @@ def open_positions_report():
                 LongPosition.sell_timestamp.is_null(True)
             ).scalar(as_tuple=True)
 
+        if not num_positions:
+            continue
+
         quantity = Decimal(quantity).quantize(Decimal('0.00000001'))
         spent = Decimal(spent)
 

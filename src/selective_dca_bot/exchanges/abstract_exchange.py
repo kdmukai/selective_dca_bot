@@ -4,14 +4,33 @@ from decimal import Decimal
 
 
 class AbstractExchange(ABC):
+    _exchange_name = None
+
 
     def __init__(self, api_key, api_secret, watchlist):
         super().__init__()
         self.watchlist = watchlist
 
+    @property
+    def exchange_name(self):
+        return self._exchange_name
 
     @abstractmethod
-    def initialize_market(self, market):
+    def build_market_name(self, crypto, base_currency):
+        pass
+
+    @abstractmethod
+    def initialize_market(self, crypto, base_currency):
+        pass
+
+
+    @abstractmethod
+    def get_current_ask(self, market):
+        pass
+
+
+    @abstractmethod
+    def buy(self, market, quantity):
         pass
 
 
@@ -43,15 +62,23 @@ class AbstractExchange(ABC):
         pass
 
 
-    def calculate_latest_metrics(self, base_pair, interval, ma_periods):
+    @abstractmethod
+    def ingest_latest_candles(self, market, interval, since=None, limit=5):
+        pass
+
+
+    def calculate_latest_metrics(self, base_currency, interval, ma_periods):
         from ..models import Candle, AllTimeWatchlist
 
         metrics = []
 
         # update ALL cryptos ever watched for this exchange (to support historical back testing)
         for crypto in AllTimeWatchlist.get_watchlist(exchange=self.exchange_name):
-            market = f"{crypto}{base_pair}"
-            self.initialize_market(market)
+            if not crypto:
+                continue
+                
+            market = f"{crypto}{base_currency}"
+            self.initialize_market(crypto, base_currency)
 
             # How many candles do we need to catch up on?
             last_candle = Candle.get_last_candle(market, interval)

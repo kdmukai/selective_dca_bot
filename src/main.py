@@ -9,28 +9,26 @@ from decimal import Decimal, ROUND_UP
 from datetime import timedelta
 
 from selective_dca_bot import config, utils
-from selective_dca_bot.exchanges import BinanceExchange, ExchangesManager, EXCHANGE__BINANCE
+from selective_dca_bot.exchanges import (
+    BinanceExchange, ExchangesManager, EXCHANGE__BINANCE, EXCHANGE__BITTREX)
 from selective_dca_bot.models import Candle, LongPosition, MarketParams, AllTimeWatchlist
 
 
 parser = argparse.ArgumentParser(description='Selective DCA (Dollar Cost Averaging) Bot')
 
+
 # Required positional arguments
 parser.add_argument('buy_amount', type=Decimal,
                     help="The quantity of the crypto to spend (e.g. 0.05)")
-parser.add_argument('base_pair',
+
+parser.add_argument('base_currency',
                     help="""The ticker of the currency to spend (e.g. 'BTC',
                         'ETH', 'USD', etc)""")
 
-# Optional switches
-# parser.add_argument('-n', '--num_buys',
-#                     default=1,
-#                     dest="num_buys",
-#                     type=int,
-#                     help="Divide up the 'amount' across 'n' selective buys")
 
+# Optional switches
 parser.add_argument('-e', '--exchanges',
-                    default='binance',
+                    default=f"{EXCHANGE__BINANCE},{EXCHANGE__BITTREX}",
                     dest="exchanges",
                     help="Comma-separated list of exchanges to include in this run")
 
@@ -73,12 +71,11 @@ if __name__ == '__main__':
     print(f"* {get_timestamp()}")
     args = parser.parse_args()
     buy_amount = args.buy_amount
-    base_pair = args.base_pair
+    base_currency = args.base_currency
     live_mode = args.live_mode
     update_order_status = args.update_order_status
     config.is_test = not live_mode
     performance_report = args.performance_report
-    # num_buys = args.num_buys
     exchange_list = args.exchanges.split(',')
 
     # Read settings
@@ -87,6 +84,15 @@ if __name__ == '__main__':
 
     binance_key = arg_config.get('API', 'BINANCE_KEY')
     binance_secret = arg_config.get('API', 'BINANCE_SECRET')
+
+    try:
+        bittrex_key = arg_config.get('API', 'BITTREX_KEY')
+        bittrex_secret = arg_config.get('API', 'BITTREX_SECRET')
+    except configparser.NoOptionError:
+        bittrex_key = None
+        bittrex_secret = None
+
+
 
     max_crypto_holdings_percentage = Decimal(arg_config.get('CONFIG', 'MAX_CRYPTO_HOLDINGS_PERCENTAGE'))
     max_consecutive_buys = Decimal(arg_config.get('CONFIG', 'MAX_CONSECUTIVE_BUYS'))
@@ -117,14 +123,12 @@ if __name__ == '__main__':
     arg_config.read(args.portfolio_config)
 
     watchlist = []
-    binance_watchlist = [x.strip() for x in arg_config.get('WATCHLIST', 'BINANCE').split(',')]
-    watchlist.extend(binance_watchlist)
+    binance_watchlist = [x.strip() for x in arg_config.get('WATCHLIST', 'BINANCE').split(',') if x != '']
+    bittrex_watchlist = [x.strip() for x in arg_config.get('WATCHLIST', 'BITTREX').split(',') if x != '']
 
-    do_not_sell_list = []
-    binance_do_not_sell_list = arg_config.get('DO_NOT_SELL_LIST', 'BINANCE', fallback=None)
-    if binance_do_not_sell_list:
-        binance_do_not_sell_list = [x.strip() for x in binance_do_not_sell_list.split(',')]
-        do_not_sell_list.extend(binance_do_not_sell_list)
+    watchlist.extend(binance_watchlist)
+    watchlist.extend(bittrex_watchlist)
+
 
     params = {
         # "num_buys": num_buys,
@@ -141,7 +145,7 @@ if __name__ == '__main__':
     #------------------------------------------------------------------------------------
     # UPDATE latest candles
     exchanges_data = []
-    if EXCHANGE__BINANCE in exchange_list:
+    if EXCHANGE__BINANCE in exchange_list and binance_watchlist:
         exchanges_data.append(
             {
                 'name': EXCHANGE__BINANCE,
@@ -151,10 +155,20 @@ if __name__ == '__main__':
             }
         )
 
+    if EXCHANGE__BITTREX in exchange_list and bittrex_watchlist:
+        exchanges_data.append(
+            {
+                'name': EXCHANGE__BITTREX,
+                'key': bittrex_key,
+                'secret': bittrex_secret,
+                'watchlist': bittrex_watchlist,
+            }
+        )
+
     exchanges = ExchangesManager.get_exchanges(exchanges_data)
     metrics = []
     for name, exchange in exchanges.items():
-        metrics.extend(exchange.calculate_latest_metrics(base_pair=base_pair, interval=config.interval, ma_periods=ma_periods))
+        metrics.extend(exchange.calculate_latest_metrics(base_currency=base_currency, interval=config.interval, ma_periods=ma_periods))
         """
             metrics = [{
                     'exchange': self.exchange_name,
@@ -195,7 +209,7 @@ if __name__ == '__main__':
 
                 for position in positions_sold:
                     num_positions_sold += 1
-                    recently_sold += f"{position.market}: sold {'{:f}'.format(position.sell_quantity.normalize())} | recouped {'{:f}'.format((position.sell_quantity * position.sell_price).quantize(Decimal('0.00000001')))} {base_pair} | scalped {'{:f}'.format(position.scalped_quantity.normalize())}\n"
+                    recently_sold += f"{position.market}: sold {'{:f}'.format(position.sell_quantity.normalize())} | recouped {'{:f}'.format((position.sell_quantity * position.sell_price).quantize(Decimal('0.00000001')))} {base_currency} | scalped {'{:f}'.format(position.scalped_quantity.normalize())}\n"
 
         if live_mode and num_positions_sold > 0:
             subject = f"SOLD {num_positions_sold} positions"
@@ -355,7 +369,7 @@ if __name__ == '__main__':
     num_positions = {}
     total_positions = LongPosition.get_open_positions().count()
     for crypto in watchlist:
-        market = f"{crypto}{base_pair}"
+        market = f"{crypto}{base_currency}"
         num_positions[crypto] = LongPosition.get_open_positions(market).count()
         if total_positions > 0 and Decimal(num_positions[crypto] / total_positions) >= max_crypto_holdings_percentage:
             over_positioned.append(crypto)
@@ -366,7 +380,7 @@ if __name__ == '__main__':
     max_price_to_ma = max(metrics, key=lambda m:m['price_to_ma'])['price_to_ma']
     for metric in sorted(metrics, key = lambda i: i['price_to_ma']):
         market = metric['market']
-        crypto = metric['market'][:(-1 * len(base_pair))]
+        crypto = metric['market'][:(-1 * len(base_currency))]
         if crypto not in watchlist:
             # This is a historical crypto being updated
             continue
@@ -412,7 +426,7 @@ if __name__ == '__main__':
 
     # Set up a market buy for the first result that isn't overpositioned
     market = target_metric['market']
-    crypto = market[:(-1 * len(base_pair))]
+    crypto = market[:(-1 * len(base_currency))]
     exchange_name = target_metric['exchange']
     exchange = exchanges[exchange_name]
     ma_period = target_metric['ma_period']
@@ -430,7 +444,7 @@ if __name__ == '__main__':
         print(f"Must increase quantized_buy_qty: {quantized_buy_qty} * {current_price} < {market_params.min_notional}")
         quantized_buy_qty += market_params.lot_step_size
 
-    print(f"Buy: {'{:f}'.format(quantized_buy_qty.normalize())} {crypto} @ {current_price:0.8f} {base_pair}\n")
+    print(f"Buy: {'{:f}'.format(quantized_buy_qty.normalize())} {crypto} @ {current_price:0.8f} {base_currency}\n")
 
     if live_mode:
         results = exchange.buy(market, quantized_buy_qty)

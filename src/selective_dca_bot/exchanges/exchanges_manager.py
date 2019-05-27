@@ -1,5 +1,5 @@
-from . import BinanceExchange
-from .constants import EXCHANGE__BINANCE
+from . import BinanceExchange, BittrexExchange
+from .constants import EXCHANGE__BINANCE, EXCHANGE__BITTREX
 
 
 class ExchangesManager():
@@ -11,6 +11,13 @@ class ExchangesManager():
         for exchange in exchanges:
             if exchange['name'] == EXCHANGE__BINANCE:
                 ex[EXCHANGE__BINANCE] = BinanceExchange(exchange['key'], exchange['secret'], exchange['watchlist'])
+
+            elif exchange['name'] == EXCHANGE__BITTREX:
+                ex[EXCHANGE__BITTREX] = BittrexExchange(exchange['key'], exchange['secret'], exchange['watchlist'])
+
+            else:
+                raise Exception("Exchange not implemented")
+
 
             # Also update the exchange's all-time watchlist
             if not AllTimeWatchlist.get_watchlist(exchange=exchange['name']):

@@ -43,6 +43,10 @@ else:
 
 
 
+ONE_SATOSHI = Decimal('0.00000001')
+
+
+
 class BaseModel(Model):
     class Meta:
         database = db
@@ -341,9 +345,11 @@ class LongPosition(BaseModel):
 
 class MarketParams(BaseModel):
     EXCHANGE__BINANCE = "B"
+    EXCHANGE__BITTREX = "X"
     EXCHANGE__KUCOIN = "K"
     _market_choices = (
         (EXCHANGE__BINANCE, "Binance"),
+        (EXCHANGE__BITTREX, "Bittrex"),
         (EXCHANGE__KUCOIN, "Kucoin"),
     )
     exchange = CharField(default=EXCHANGE__BINANCE, choices=_market_choices)

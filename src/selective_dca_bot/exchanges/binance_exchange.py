@@ -32,19 +32,19 @@ class BinanceExchange(AbstractExchange):
         self.client = Client(api_key, api_secret)
 
 
-    @property
-    def exchange_token(self):
-        return self._exchange_token
 
-    @property
-    def exchange_name(self):
-        return self._exchange_name
+    def build_market_name(self, crypto, base_currency):
+        # Binance uses HYDROBTC format
+        return f"{crypto}{base_currency}"
 
 
-    def initialize_market(self, market, recheck=False):
+
+    def initialize_market(self, crypto, base_currency, recheck=False):
         """
             Make sure we have MarketParams for the given market
         """
+        market = self.build_market_name(crypto, base_currency)
+
         params = MarketParams.get_market(market, exchange=MarketParams.EXCHANGE__BINANCE)
         if not params or recheck:
             # Have to query the API and populate
@@ -79,11 +79,16 @@ class BinanceExchange(AbstractExchange):
                 }
             """
             response = self.client.get_symbol_info(symbol=market)
+            if not response:
+                raise Exception(f"Couldn't retrieve current ticker for '{self.build_market_name(crypto, base_currency)}' on {self.exchange_name}")
+
             tick_size = None
             step_size = None
             min_notional = None
             multiplier_up = None
             avg_price_minutes = None
+
+
             for filter in response["filters"]:
                 if filter['filterType'] == 'PRICE_FILTER':
                     tick_size = Decimal(filter["tickSize"])
